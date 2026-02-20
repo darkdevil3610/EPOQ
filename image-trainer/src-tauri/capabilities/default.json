@@ -1,0 +1,50 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "fs:default",
+    "fs:allow-read-file",
+    "fs:allow-read-text-file",
+    "shell:allow-open",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "python",
+          "cmd": "python",
+          "args": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "python",
+          "cmd": "python",
+          "args": true
+        }
+      ]
+    },
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        "$DESKTOP/**",
+        "$DOCUMENT/**",
+        "$DOWNLOAD/**",
+        "$HOME/**",
+        "$APPDATA/**",
+        "$APPCONFIG/**",
+        "$APPLOCALDATA/**",
+        "$CACHE/**",
+        "$TEMP/**",
+        "C:/**",
+        "D:/**",
+        "E:/**"
+      ]
+    }
+  ]
+}
