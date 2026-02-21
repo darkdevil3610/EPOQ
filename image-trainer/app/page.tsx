@@ -253,6 +253,17 @@ export default function Home() {
     fetchSystemInfo();
   }
 }, [activeTab]);
+useEffect(() => {
+  if (activeTab === "system") {
+    fetchSystemInfo();
+
+    const interval = setInterval(() => {
+      fetchSystemInfo();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }
+}, [activeTab, isRunning]);
 
   useEffect(() => {
     async function loadMatrixImage() {
