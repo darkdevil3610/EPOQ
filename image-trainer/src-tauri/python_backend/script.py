@@ -28,6 +28,7 @@ def main():
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate for optimizer')
     parser.add_argument('--zip_dataset', action='store_true', help='Create a zip archive of the dataset')
     parser.add_argument('--only_zip', action='store_true', help='Exit after creating dataset zip')
+    parser.add_argument('--experiment_id', type=str, default=None, help='Experiment ID from the frontend')
     args = parser.parse_args()
     
     data_dir = args.path

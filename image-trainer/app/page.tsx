@@ -84,7 +84,7 @@ export default function Home() {
   useEffect(() => {
     async function checkGpu() {
       try {
-        const cmd = Command.create('python3', ['-c', 'import torch; print(torch.cuda.is_available())']);
+        const cmd = Command.create('python', ['-c', 'import torch; print(torch.cuda.is_available())']);
         cmd.stdout.on('data', (data) => {
           setGpuAvailable(data.trim() === 'True');
         });
@@ -242,7 +242,7 @@ export default function Home() {
 
       addLog(`Starting command: python ${args.join(' ')}`, 'info');
 
-      const cmd = Command.create('python3', args);
+      const cmd = Command.create('python', args);
       commandRef.current = cmd;
 
       cmd.on('close', (data) => {
