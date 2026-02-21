@@ -4,14 +4,12 @@
 use tauri::Manager;
 use tauri_plugin_shell::ShellExt;
 
-/// Tries to run `python` first, then `python3` as a fallback.
-/// Returns (stdout, stderr).
 async fn run_python(
     app: &tauri::AppHandle,
     args: &[&str],
 ) -> Result<String, String> {
-    // Try `python` first
-    let cmds = ["python", "python3"];
+    // Try `python` first, then alternatives including the Windows Python Launcher `py`
+    let cmds = ["python", "python3", "py"];
     let mut last_err = String::new();
 
     for cmd in cmds {
@@ -25,11 +23,22 @@ async fn run_python(
             Ok(output) => {
                 let stdout = String::from_utf8_lossy(&output.stdout).to_string();
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-                if !output.status.success() && stdout.is_empty() {
-                    last_err = stderr;
+                
+                // If it succeeds, immediately return the standard output
+                if output.status.success() {
+                    return Ok(stdout);
+                } else {
+                    // Record error to return if ALL commands fail
+                    let msg = if !stderr.trim().is_empty() {
+                        stderr
+                    } else if !stdout.trim().is_empty() {
+                        stdout
+                    } else {
+                        format!("Exited with code: {}", output.status.code().unwrap_or(-1))
+                    };
+                    last_err = msg;
                     continue;
                 }
-                return Ok(stdout);
             }
             Err(e) => {
                 last_err = e.to_string();
@@ -56,7 +65,7 @@ async fn run_tabular_processor(
         .join("python_backend")
         .join("tabular_processor.py");
 
-    let script = script_path.to_string_lossy().to_string();
+    let script = script_path.to_string_lossy().to_string().replace("\\\\?\\", "");
 
     // Build args list
     let mut args: Vec<String> = vec![
@@ -89,7 +98,7 @@ async fn run_check_gpu(app: tauri::AppHandle) -> Result<String, String> {
         .join("python_backend")
         .join("check_gpu.py");
 
-    let script = script_path.to_string_lossy().to_string();
+    let script = script_path.to_string_lossy().to_string().replace("\\\\?\\", "");
 
     match run_python(&app, &[script.as_str()]).await {
         Ok(output) => Ok(output.trim().to_string()), // remove extra newline
@@ -106,7 +115,7 @@ async fn get_system_info(app: tauri::AppHandle) -> Result<String, String> {
         .join("python_backend")
         .join("system_info.py");
 
-    let script = script_path.to_string_lossy().to_string();
+    let script = script_path.to_string_lossy().to_string().replace("\\\\?\\", "");
 
     match run_python(&app, &[script.as_str()]).await {
         Ok(output) => Ok(output.trim().to_string()),
