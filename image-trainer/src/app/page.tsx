@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import GPUStatus from "./components/GPUStatus";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -415,6 +416,8 @@ export default function Home() {
                 directly from this interface.
               </p>
             </div>
+
+            <GPUStatus/>
 
             <div className="flex gap-3">
               <a
