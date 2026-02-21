@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Command } from '@tauri-apps/plugin-shell';
 import { open } from '@tauri-apps/plugin-dialog';
 import { resolveResource } from '@tauri-apps/api/path';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { FolderOpen, Play, Square, Save, Activity, Terminal, CheckCircle, AlertCircle, BarChart2, Layers, Download, Cpu, Sun, Moon } from 'lucide-react';
+import { FolderOpen, Play, Square, Save, Activity, Terminal, CheckCircle, AlertCircle, BarChart2, Layers, Download, Cpu, Sun, Moon, Database } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -46,11 +46,24 @@ const PRESETS: Preset[] = [
 
 interface EvalResult {
   status: string;
-  report: Record<string, any>; // classification report dict
+  report: Record<string, any>;
   confusion_matrix_path: string;
   total_epochs: number;
   test_size: number;
 }
+
+type TabularResult = {
+  status: 'success' | 'error';
+  message?: string;
+  columns?: string[];
+  data?: (string | number | null)[][];
+  shape?: [number, number];
+  dtypes?: Record<string, string>;
+  missing?: Record<string, number>;
+  loaded_path?: string;
+};
+type TabAction = 'load' | 'drop_missing' | 'fill_missing' | 'label_encode' | 'one_hot_encode';
+type FillMethod = 'mean' | 'median' | 'mode' | 'zero';
 
 export default function Home() {
   const [datasetPath, setDatasetPath] = useState('');
@@ -80,7 +93,16 @@ export default function Home() {
   const [evalResult, setEvalResult] = useState<EvalResult | null>(null);
   const [matrixImageUrl, setMatrixImageUrl] = useState<string | null>(null);
   const [imageLoadError, setImageLoadError] = useState(false);
-  const [activeTab, setActiveTab] = useState<'logs' | 'charts' | 'results'>('logs');
+  const [activeTab, setActiveTab] = useState<'logs' | 'charts' | 'results' | 'data'>('logs');
+
+  // Tabular / GPU state
+  const [tabFile, setTabFile] = useState('');
+  const [tabAction, setTabAction] = useState<TabAction>('load');
+  const [fillMethod, setFillMethod] = useState<FillMethod>('mean');
+  const [encodeColumns, setEncodeColumns] = useState('');
+  const [tabOutPath, setTabOutPath] = useState('');
+  const [tabLoading, setTabLoading] = useState(false);
+  const [tabResult, setTabResult] = useState<TabularResult | null>(null);
 
   const logsEndRef = useRef<HTMLDivElement>(null);
   const commandRef = useRef<Command<string> | null>(null);
@@ -112,6 +134,37 @@ export default function Home() {
     }
     checkGpu();
   }, [selectedEnv]);
+
+  const pickTabFile = useCallback(async () => {
+    const selected = await open({ multiple: false, filters: [{ name: 'Data Files', extensions: ['csv', 'xlsx', 'xls'] }] });
+    if (typeof selected === 'string') setTabFile(selected);
+  }, []);
+
+  const runTabular = useCallback(async () => {
+    if (!tabFile) return;
+    setTabLoading(true);
+    setTabResult(null);
+    try {
+      const isProcess = tabAction !== 'load';
+      let paramsJson: string | undefined;
+      if (isProcess) {
+        const p: Record<string, unknown> = { operation: tabAction };
+        if (tabAction === 'fill_missing') p.method = fillMethod;
+        if (tabAction === 'label_encode' || tabAction === 'one_hot_encode')
+          p.columns = encodeColumns.split(',').map(s => s.trim()).filter(Boolean);
+        paramsJson = JSON.stringify(p);
+      }
+      const raw: string = await invoke('run_tabular_processor', {
+        file: tabFile, action: isProcess ? 'process' : 'load',
+        params: paramsJson, out: tabOutPath || undefined,
+      });
+      setTabResult(JSON.parse(raw));
+    } catch (err) {
+      setTabResult({ status: 'error', message: String(err) });
+    } finally {
+      setTabLoading(false);
+    }
+  }, [tabFile, tabAction, fillMethod, encodeColumns, tabOutPath]);
 
   const scanCondaEnvs = async () => {
     setScanningEnvs(true);
@@ -776,6 +829,12 @@ export default function Home() {
                  >
                    <CheckCircle className="w-4 h-4" /> Results
                  </button>
+                 <button id="tab-data"
+                   onClick={() => setActiveTab('data')}
+                   className={cn("px-6 py-4 text-sm font-medium border-b-2 transition-all flex items-center gap-2", activeTab === 'data' ? "border-white text-white" : "border-transparent text-zinc-500 hover:text-zinc-300")}
+                 >
+                   <Database className="w-4 h-4" /> Data
+                 </button>
               </div>
 
               <div className="flex-1 overflow-y-auto bg-black/50 scrollbar-thin">
@@ -964,10 +1023,111 @@ export default function Home() {
                        )}
                     </div>
                  )}
+
+                 {activeTab === 'data' && (
+                   <div className="p-6 overflow-y-auto space-y-4">
+                     <div>
+                       <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-widest mb-2">Tabular Data Processor</h3>
+                       <p className="text-xs text-zinc-500 mb-4">Load or transform CSV / Excel files via <code className="bg-zinc-900 px-1.5 py-0.5 rounded text-zinc-300">tabular_processor.py</code></p>
+                     </div>
+                     <div className="flex gap-2">
+                       <input id="data-file-path" type="text" value={tabFile} onChange={e => setTabFile(e.target.value)}
+                         placeholder="Select CSV / Excel file…"
+                         className="flex-1 bg-black border border-zinc-800 rounded-lg py-2.5 px-3 text-sm text-zinc-300 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none font-mono"
+                       />
+                       <button id="data-pick-file" onClick={pickTabFile}
+                         className="p-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors"
+                       ><FolderOpen className="w-5 h-5" /></button>
+                     </div>
+                     <div className="relative">
+                       <select id="data-action" value={tabAction} onChange={e => setTabAction(e.target.value as TabAction)}
+                         className="w-full appearance-none bg-black border border-zinc-800 rounded-lg py-2.5 px-3 text-sm text-zinc-300 focus:border-zinc-500 focus:outline-none"
+                       >
+                         <option value="load">Load &amp; Preview</option>
+                         <option value="drop_missing">Drop Missing Rows</option>
+                         <option value="fill_missing">Fill Missing Values</option>
+                         <option value="label_encode">Label Encode</option>
+                         <option value="one_hot_encode">One-Hot Encode</option>
+                       </select>
+                       <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"><svg className="w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg></div>
+                     </div>
+                     {tabAction === 'fill_missing' && (
+                       <div className="relative">
+                         <select id="data-fill-method" value={fillMethod} onChange={e => setFillMethod(e.target.value as FillMethod)}
+                           className="w-full appearance-none bg-black border border-zinc-800 rounded-lg py-2.5 px-3 text-sm text-zinc-300 focus:border-zinc-500 focus:outline-none"
+                         >
+                           <option value="mean">Mean</option>
+                           <option value="median">Median</option>
+                           <option value="mode">Mode</option>
+                           <option value="zero">Zero</option>
+                         </select>
+                         <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"><svg className="w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg></div>
+                       </div>
+                     )}
+                     {(tabAction === 'label_encode' || tabAction === 'one_hot_encode') && (
+                       <input id="data-encode-columns" type="text" value={encodeColumns} onChange={e => setEncodeColumns(e.target.value)}
+                         placeholder="Columns to encode (comma-separated)"
+                         className="w-full bg-black border border-zinc-800 rounded-lg py-2.5 px-3 text-sm text-zinc-300 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
+                       />
+                     )}
+                     {tabAction !== 'load' && (
+                       <input id="data-out-path" type="text" value={tabOutPath} onChange={e => setTabOutPath(e.target.value)}
+                         placeholder="Save output to… (optional)"
+                         className="w-full bg-black border border-zinc-800 rounded-lg py-2.5 px-3 text-sm text-zinc-300 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none font-mono"
+                       />
+                     )}
+                     <button id="data-run-btn" onClick={runTabular} disabled={!tabFile || tabLoading}
+                       className="flex items-center justify-center gap-2 w-full py-2.5 bg-white text-black hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-semibold transition-all"
+                     >
+                       {tabLoading ? <><span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Processing…</> : 'Run'}
+                     </button>
+                     {tabResult && (
+                       <div>
+                         {tabResult.status === 'error' ? (
+                           <div className="rounded-xl border border-red-900/30 bg-red-900/20 p-3 text-red-400 text-xs"><strong>Error:</strong> {tabResult.message}</div>
+                         ) : (
+                           <div className="space-y-3">
+                             <div className="flex flex-wrap gap-2 text-xs">
+                               {tabResult.shape && <span className="rounded-full bg-blue-500/10 border border-blue-500/30 px-3 py-1 text-blue-400">Shape: {tabResult.shape[0]} × {tabResult.shape[1]}</span>}
+                               {tabResult.message && <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-emerald-400">{tabResult.message}</span>}
+                             </div>
+                             {tabResult.columns && tabResult.data && (
+                               <div className="overflow-x-auto rounded-xl border border-zinc-800">
+                                 <table className="min-w-full text-xs">
+                                   <thead className="bg-zinc-900"><tr>
+                                     {tabResult.columns.map(col => (
+                                       <th key={col} className="px-3 py-2 text-left font-semibold text-zinc-300 whitespace-nowrap border-b border-zinc-800">
+                                         <div>{col}</div>
+                                         {tabResult.dtypes && <div className="font-normal text-zinc-500">{tabResult.dtypes[col]}</div>}
+                                       </th>
+                                     ))}
+                                   </tr></thead>
+                                   <tbody className="divide-y divide-zinc-800">
+                                     {tabResult.data.map((row, ri) => (
+                                       <tr key={ri} className="hover:bg-zinc-900/50 transition-colors">
+                                         {row.map((cell, ci) => (
+                                           <td key={ci} className={`px-3 py-2 whitespace-nowrap ${cell === null ? 'text-zinc-500 italic' : 'text-zinc-100'}`}>
+                                             {cell === null ? 'null' : String(cell)}
+                                           </td>
+                                         ))}
+                                       </tr>
+                                     ))}
+                                   </tbody>
+                                 </table>
+                               </div>
+                             )}
+                           </div>
+                         )}
+                       </div>
+                     )}
+                   </div>
+                 )}
               </div>
            </div>
         </section>
       </main>
+
+
     </div>
   );
 }
