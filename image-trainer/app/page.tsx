@@ -6,7 +6,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { resolveResource } from '@tauri-apps/api/path';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { FolderOpen, Play, Square, Save, Activity, Terminal, CheckCircle, AlertCircle, BarChart2, Layers, Download, Cpu } from 'lucide-react';
+import { FolderOpen, Play, Square, Save, Activity, Terminal, CheckCircle, AlertCircle, BarChart2, Layers, Download, Cpu, Sun, Moon } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -68,6 +68,7 @@ export default function Home() {
   const [scanningEnvs, setScanningEnvs] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
   const [showExperiments, setShowExperiments] = useState(false);
+  const [isLightMode, setIsLightMode] = useState(false);
   const [recentExperiments, setRecentExperiments] = useState<{id: string; date: string; accuracy: string; model: string}[]>([]);
   
   const [isRunning, setIsRunning] = useState(false);
@@ -181,7 +182,8 @@ export default function Home() {
 
   useEffect(() => {
     if (activeTab === 'logs') {
-      logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      // Use block: 'nearest' to prevent the entire browser window from scrolling
+      logsEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [logs, activeTab]);
 
@@ -387,7 +389,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen font-sans bg-black text-zinc-100">
+    <div data-theme={isLightMode ? 'light' : 'dark'} className="min-h-screen font-sans bg-black text-zinc-100 theme-transition">
       {/* Header */}
       <header className="sticky top-0 z-50 flex items-center justify-between bg-black/80 backdrop-blur-md border-b border-zinc-800/50 px-8 py-4 mb-8">
         <div className="flex items-center gap-4">
@@ -473,8 +475,17 @@ export default function Home() {
             )}
           </div>
 
+            {/* Theme Toggle */}
+            <button
+              onClick={() => setIsLightMode(!isLightMode)}
+              className="flex items-center justify-center w-[38px] h-[38px] bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors ml-2"
+              aria-label="Toggle theme"
+            >
+              {isLightMode ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+            </button>
+
           {/* Keyboard Shortcut Hint */}
-          <span className="text-xs text-zinc-600 hidden lg:inline">Ctrl+Enter to start</span>
+          <span className="text-xs text-zinc-600 hidden lg:inline ml-2">Ctrl+Enter to start</span>
            
            {isRunning ? (
              <button 
