@@ -27,6 +27,7 @@ def main():
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
     parser.add_argument('--zip_dataset', action='store_true', help='Create a zip archive of the dataset')
     parser.add_argument('--only_zip', action='store_true', help='Exit after creating dataset zip')
+    parser.add_argument('--experiment_id', type=str, required=False, help='Experiment ID for tracking')
     args = parser.parse_args()
     
     data_dir = args.path
@@ -126,23 +127,34 @@ def main():
         test_len = total_images - train_len - val_len
         
         # 3. Create datasets with correct transforms
-        # We use random_split simply to get indices, then map those indices to specific datasets
-        # This allows us to use different transforms for train and val/test
-        from torch.utils.data import random_split
+        # We use train_test_split to get stratified indices
+        from sklearn.model_selection import train_test_split
         
-        # Since random_split works on the dataset, let's just use it on range(total) to get indices? 
-        # No, random_split takes a dataset. 
-        # Let's perform the split on the dummy, get indices, then create Subsets.
+        targets = dummy_dataset.targets
+        indices = list(range(total_images))
         
-        subset_train, subset_val, subset_test = random_split(dummy_dataset, [train_len, val_len, test_len])
+        try:
+            train_idx, temp_idx, _, temp_targets = train_test_split(
+                indices, targets, train_size=train_len, stratify=targets, random_state=42
+            )
+            val_idx, test_idx = train_test_split(
+                temp_idx, train_size=val_len, stratify=temp_targets, random_state=42
+            )
+        except ValueError as e:
+            print(f"Stratification failed ({e}), falling back to random split.", flush=True)
+            from torch.utils.data import random_split
+            subset_train, subset_val, subset_test = random_split(dummy_dataset, [train_len, val_len, test_len])
+            train_idx = subset_train.indices
+            val_idx = subset_val.indices
+            test_idx = subset_test.indices
         
         # True datasets
         dataset_train_full = datasets.ImageFolder(data_dir, data_transforms['train'])
         dataset_eval_full = datasets.ImageFolder(data_dir, data_transforms['val']) # No aug for val/test
         
-        train_dataset = Subset(dataset_train_full, subset_train.indices)
-        val_dataset = Subset(dataset_eval_full, subset_val.indices)
-        test_dataset = Subset(dataset_eval_full, subset_test.indices)
+        train_dataset = Subset(dataset_train_full, train_idx)
+        val_dataset = Subset(dataset_eval_full, val_idx)
+        test_dataset = Subset(dataset_eval_full, test_idx)
         
         dataloaders['train'] = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
         dataloaders['val'] = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
