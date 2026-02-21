@@ -57,6 +57,7 @@ export default function Home() {
   const [savePath, setSavePath] = useState('');
   const [epochs, setEpochs] = useState(5);
   const [batchSize, setBatchSize] = useState(32);
+  const [numWorkers, setNumWorkers] = useState(-1);
   const [model, setModel] = useState('resnet18');
   const [learningRate, setLearningRate] = useState(0.001);
   const [zipDataset, setZipDataset] = useState(false);
@@ -237,6 +238,7 @@ export default function Home() {
       ];
       args.push('--experiment_id', experimentId);
       if (savePath) args.push('--save_path', savePath);
+      args.push('--num_workers', numWorkers.toString());
       if (zipDataset) args.push('--zip_dataset');
       if (onlyZip) args.push('--only_zip');
 
@@ -466,6 +468,31 @@ export default function Home() {
                     onChange={(e) => setBatchSize(parseInt(e.target.value) || 1)}
                     className="w-full bg-black border border-zinc-800 rounded-lg py-2.5 px-3 text-sm text-zinc-300 focus:border-zinc-600 focus:outline-none transition-colors font-mono"
                   />
+                </div>
+                <div className="space-y-2 col-span-2">
+                  <label className="text-xs uppercase tracking-wider text-zinc-500 font-semibold flex items-center justify-between">
+                    <span>DataLoader Workers</span>
+                    <span className="text-zinc-600 normal-case font-normal">{numWorkers === -1 ? 'auto-detect' : numWorkers === 0 ? 'disabled (sync)' : `${numWorkers} workers`}</span>
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min={-1}
+                      max={8}
+                      step={1}
+                      value={numWorkers}
+                      onChange={(e) => setNumWorkers(parseInt(e.target.value))}
+                      className="flex-1 accent-white h-1.5 bg-zinc-800 rounded-full appearance-none cursor-pointer"
+                    />
+                    <input
+                      type="number"
+                      min={-1}
+                      max={16}
+                      value={numWorkers}
+                      onChange={(e) => setNumWorkers(parseInt(e.target.value))}
+                      className="w-16 bg-black border border-zinc-800 rounded-lg py-2.5 px-3 text-sm text-zinc-300 focus:border-zinc-600 focus:outline-none transition-colors font-mono text-center"
+                    />
+                  </div>
                 </div>
               </div>
 
