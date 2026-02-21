@@ -70,7 +70,7 @@ export default function Home() {
   const [showExperiments, setShowExperiments] = useState(false);
   const [isLightMode, setIsLightMode] = useState(false);
   const [recentExperiments, setRecentExperiments] = useState<{id: string; date: string; accuracy: string; model: string}[]>([]);
-  
+  const finalAccuracyRef = useRef<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [pid, setPid] = useState<number | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -91,13 +91,16 @@ export default function Home() {
     async function checkGpu() {
       setGpuAvailable(null);
       try {
-        let cmdName = 'python';
-        let args = ['-c', 'import torch; print(torch.cuda.is_available())'];
-        
+        let cmdName: string;
+        let args: string[];
+
         if (selectedEnv.startsWith('conda:')) {
-           const envName = selectedEnv.replace('conda:', '');
-           cmdName = 'conda';
-           args = ['run', '-n', envName, 'python', '-c', 'import torch; print(torch.cuda.is_available())'];
+          const envName = selectedEnv.replace('conda:', '');
+          cmdName = 'conda';
+          args = ['run', '-n', envName, 'python', '-c', 'import torch; print(torch.cuda.is_available())'];
+        } else {
+          cmdName = await resolvePythonInterpreter();
+          args = ['-c', 'import torch; print(torch.cuda.is_available())'];
         }
         
         const cmd = Command.create(cmdName, args);
@@ -252,40 +255,50 @@ export default function Home() {
       console.error(err);
     }
   };
+  async function resolvePythonInterpreter(): Promise<string> {
+  const candidates = ['python', 'python3', 'py'];
 
+  for (const cmd of candidates) {
+    try {
+      await Command.create(cmd, ['--version']).execute();
+      return cmd;
+    } catch {}
+  }
+
+  throw new Error('No Python interpreter found.');
+}
   const startTraining = async () => {
-    if (!datasetPath) {
-      addLog('Please select a dataset path first.', 'error');
-      return;
+  let experimentId = '';
+
+  if (!datasetPath) {
+    addLog('Please select a dataset path first.', 'error');
+    return;
+  }
+
+  setIsRunning(true);
+  setLogs([]);
+  setChartData([]);
+  setEvalResult(null);
+  setProgress(0);
+  setActiveTab('logs');
+  setShowPresets(false);
+  setShowExperiments(false);
+
+  try {
+
+    const scriptPath = await resolveResource('python_backend/script.py');
+    if (!scriptPath) {
+      throw new Error('Failed to resolve backend script path.');
     }
 
-    setIsRunning(true);
-    setLogs([]);
-    setChartData([]);
-    setEvalResult(null);
-    setProgress(0);
-    setActiveTab('logs');
-    setShowPresets(false);
-    setShowExperiments(false);
-    
-    try {
-      let scriptPath: string;
-      try {
-        scriptPath = await resolveResource('python_backend/script.py');
-        addLog(`Resolved script path: ${scriptPath}`, 'info');
-      } catch (e) {
-        addLog(`Failed to resolve resource: ${e}. Trying fallback...`, 'error');
-        scriptPath = 'python_backend/script.py'; 
-      }
-      // Generate experiment ID
-      const now = new Date();
-      const timestamp = now
-        .toISOString()
-        .replace(/[-:]/g, '')
-        .replace(/\..+/, '');
-      const experimentId = `exp_${timestamp}`;
+    addLog(`Resolved script path: ${scriptPath}`, 'info');
 
-      addLog(`Experiment ID: ${experimentId}`, 'info');
+    const now = new Date();
+    const timestamp = now.toISOString().replace(/[-:]/g, '').replace(/\..+/, '');
+    experimentId = `exp_${timestamp}`;
+
+    addLog(`Experiment ID: ${experimentId}`, 'info');
+
       const args = [
         scriptPath,
         '--path', datasetPath,
@@ -300,12 +313,15 @@ export default function Home() {
       if (zipDataset) args.push('--zip_dataset');
       if (onlyZip) args.push('--only_zip');
 
-      let finalCmd = 'python';
+      let finalCmd: string;
       let finalArgs = args;
+
       if (selectedEnv.startsWith('conda:')) {
-         const envName = selectedEnv.replace('conda:', '');
-         finalCmd = 'conda';
-         finalArgs = ['run', '-n', envName, '--no-capture-output', 'python', ...args];
+        const envName = selectedEnv.replace('conda:', '');
+        finalCmd = 'conda';
+        finalArgs = ['run', '-n', envName, '--no-capture-output', 'python', ...args];
+      } else {
+        finalCmd = await resolvePythonInterpreter();
       }
 
       addLog(`Starting command: ${finalCmd} ${finalArgs.join(' ')}`, 'info');
@@ -320,9 +336,9 @@ export default function Home() {
         if (data.code === 0) {
             addLog('Training/Task Complete successfully.', 'success');
             // Save to recent experiments
-            const expId = `exp_${Date.now()}`;
+            // const expId = `exp_${Date.now()}`;
             setRecentExperiments(prev => [
-              { id: expId, date: new Date().toLocaleDateString(), accuracy: currentStatus?.accuracy || 'N/A', model },
+              { id: experimentId, date: new Date().toLocaleDateString(), accuracy: finalAccuracyRef.current || 'N/A', model },
               ...prev.slice(0, 4)
             ]);
         }
@@ -338,15 +354,16 @@ export default function Home() {
           const data = JSON.parse(line);
           
           if (data.status === 'training') {
-            setCurrentStatus(data);
-            setChartData(prev => [
-              ...prev, 
-              { 
-                epoch: data.epoch, 
-                accuracy: parseFloat(data.accuracy), 
-                loss: parseFloat(data.loss) 
-              }
-            ]);
+          setCurrentStatus(data);
+          setChartData(prev => [
+            ...prev,
+            {
+              epoch: data.epoch,
+              accuracy: parseFloat(data.accuracy),
+              loss: parseFloat(data.loss),
+            }
+          ]);
+          finalAccuracyRef.current = data.accuracy;
             const prog = (data.epoch / data.total_epochs) * 100;
             setProgress(prog);
             if (activeTab === 'logs' && data.epoch === 1) setActiveTab('charts');
@@ -378,15 +395,15 @@ export default function Home() {
       });
 
       const child = await cmd.spawn();
-      childRef.current = child; // Store properly
-      setPid(child.pid);
-      addLog(`Process started with PID: ${child.pid}`, 'info');
+    childRef.current = child;
+    setPid(child.pid);
+    addLog(`Process started with PID: ${child.pid}`, 'info');
 
-    } catch (err) {
-      addLog(`Failed to spawn process: ${err}`, 'error');
-      setIsRunning(false);
-    }
-  };
+  } catch (err) {
+    addLog(`Failed to spawn process: ${err}`, 'error');
+    setIsRunning(false);
+  }
+};
 
   return (
     <div data-theme={isLightMode ? 'light' : 'dark'} className="min-h-screen font-sans bg-black text-zinc-100 theme-transition">
