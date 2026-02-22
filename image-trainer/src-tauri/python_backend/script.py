@@ -17,13 +17,7 @@ def _install_missing(module_name, pip_name=None):
         except Exception as e:
             print(json.dumps({"status": "error", "message": f"Failed to install {pip_name}: {e}"}), flush=True)
 
-_install_missing("torch")
-_install_missing("torchvision")
-_install_missing("numpy")
-_install_missing("sklearn", "scikit-learn")
-_install_missing("pandas")
-_install_missing("matplotlib")
-_install_missing("seaborn")
+
 
 import torch
 import torch.nn as nn
@@ -540,4 +534,11 @@ def main():
         traceback.print_exc()
     
 if __name__ == "__main__":
+    _install_missing("torch")
+    _install_missing("torchvision")
+    _install_missing("numpy")
+    _install_missing("sklearn", "scikit-learn")
+    _install_missing("pandas")
+    _install_missing("matplotlib")
+    _install_missing("seaborn")
     main()

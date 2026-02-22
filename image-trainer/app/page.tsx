@@ -11,7 +11,6 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
-import DependencyWizard from './components/DependencyWizard';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -126,7 +125,6 @@ export default function Home() {
   const [systemInfo, setSystemInfo] = useState<any | null>(null);
   const [systemLoading, setSystemLoading] = useState(false);
   const [systemError, setSystemError] = useState<string | null>(null);
-  const [depsChecked, setDepsChecked] = useState(false);
   // AutoML State
   const [isAutoMLRunning, setIsAutoMLRunning] = useState(false);
   const [autoMLTrials, setAutoMLTrials] = useState<{trial: number; n_trials: number; params: {learning_rate: number; batch_size: number; optimizer: string}; val_accuracy: number}[]>([]);
@@ -138,6 +136,10 @@ export default function Home() {
   const childRef = useRef<any>(null);
   const metricsRef = useRef<any[]>([]);
   const [runs, setRuns] = useState<any[]>([]);
+
+  // Dataset Analysis State
+  const [datasetStats, setDatasetStats] = useState<any | null>(null);
+  const [analyzingDataset, setAnalyzingDataset] = useState(false);
   // Check GPU availability
   useEffect(() => {
     async function checkGpu() {
@@ -344,10 +346,33 @@ useEffect(() => {
       if (selected && typeof selected === 'string') {
         setDatasetPath(selected);
         if (!savePath) setSavePath(selected);
+        // Auto-analyze the dataset when selected
+        analyzeDataset(selected);
       }
     } catch (err) {
       console.error(err);
       addLog(`Failed to open dialog: ${err}`, 'error');
+    }
+  };
+
+  const analyzeDataset = async (path: string) => {
+    if (!path) return;
+    setAnalyzingDataset(true);
+    setDatasetStats(null);
+    try {
+      const result = await invoke<string>('analyze_dataset', { path });
+      const parsed = JSON.parse(result);
+      setDatasetStats(parsed);
+      if (parsed.status === 'success') {
+        addLog(`Dataset analyzed: ${parsed.total_images} images, ${parsed.class_count} classes`, 'success');
+      } else {
+        addLog(`Dataset analysis failed: ${parsed.message}`, 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      addLog(`Failed to analyze dataset: ${err}`, 'error');
+    } finally {
+      setAnalyzingDataset(false);
     }
   };
 
@@ -868,8 +893,7 @@ useEffect(() => {
 
   return (
     <>
-      {!depsChecked && <DependencyWizard onComplete={() => setDepsChecked(true)} />}
-      <div data-theme={isLightMode ? 'light' : 'dark'} className={`min-h-screen font-sans bg-black text-zinc-100 theme-transition ${!depsChecked ? 'h-screen overflow-hidden' : ''}`}>
+      <div data-theme={isLightMode ? 'light' : 'dark'} className={`min-h-screen font-sans bg-black text-zinc-100 theme-transition`}>
       {/* Header */}
       <header className="sticky top-0 z-50 flex items-center justify-between bg-black/80 backdrop-blur-md border-b border-zinc-800/50 px-8 py-4 mb-8">
         <div className="flex items-center gap-4">
@@ -989,7 +1013,7 @@ useEffect(() => {
         </div>
       </header>
 
-      <main className="grid grid-cols-1 lg:grid-cols-12 gap-8 px-8 pb-8">
+      <main className="grid grid-cols-1 lg:grid-cols-12 gap-8 px-8 pb-8 lg:items-start">
         {/* Left Panel: Configuration */}
         <section className="lg:col-span-4 space-y-8">
           <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-sm">
@@ -1049,9 +1073,81 @@ useEffect(() => {
                   >
                     <FolderOpen className="w-5 h-5" />
                   </button>
+                  <button 
+                     onClick={() => datasetPath && analyzeDataset(datasetPath)}
+                     disabled={!datasetPath || analyzingDataset}
+                     className="p-2.5 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                     title="Analyze Dataset"
+                  >
+                    {analyzingDataset ? (
+                      <div className="w-5 h-5 border-2 border-zinc-500 dark:border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Search className="w-5 h-5" />
+                    )}
+                  </button>
                 </div>
               </div>
 
+                {/* Dataset Statistics Display */}
+                {datasetStats && datasetStats.status === 'success' && (
+                <details className="group border-2 border-white rounded-xl overflow-hidden bg-black text-white">
+                  <summary className="flex items-center justify-between p-4 cursor-pointer hover:bg-white hover:text-black transition-colors">
+                  <div className="flex items-center gap-2">
+                    <Database className="w-4 h-4" />
+                    <span className="text-sm font-semibold tracking-wide">Dataset Overview</span>
+                  </div>
+                  <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                  </summary>
+                  <div className="p-4 pt-2 space-y-6">
+                  {/* Stats Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-zinc-900/50 rounded-lg p-3 border border-zinc-800">
+                    <div className="text-[9px] text-zinc-500 uppercase tracking-wider font-medium">Total Images</div>
+                    <div className="text-base font-bold text-white mt-1 truncate">{datasetStats.total_images}</div>
+                    </div>
+                    <div className="bg-zinc-900/50 rounded-lg p-3 border border-zinc-800">
+                    <div className="text-[9px] text-zinc-500 uppercase tracking-wider font-medium">Classes</div>
+                    <div className="text-base font-bold text-white mt-1 truncate">{datasetStats.class_count}</div>
+                    </div>
+                    <div className="bg-zinc-900/50 rounded-lg p-3 border border-zinc-800">
+                    <div className="text-[9px] text-zinc-500 uppercase tracking-wider font-medium">Avg Size</div>
+                    <div className="text-base font-bold text-white mt-1 truncate">{datasetStats.avg_image_size || 'N/A'}</div>
+                    </div>
+                    <div className="bg-zinc-900/50 rounded-lg p-3 border border-zinc-800">
+                    <div className="text-[9px] text-zinc-500 uppercase tracking-wider font-medium">Splits</div>
+                    <div className="text-base font-bold text-white mt-1 truncate">
+                      {Object.entries(datasetStats.splits || {}).filter(([, v]: [string, any]) => v > 0).length}
+                    </div>
+                    </div>
+                    </div>
+                  
+                  {/* Common Sizes */}
+                  {datasetStats.common_sizes && datasetStats.common_sizes.length > 0 && (
+                    <div className="pt-4 border-t border-zinc-800/50">
+                    <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-3 font-semibold">Common Resolutions</div>
+                    <div className="flex flex-wrap gap-2">
+                      {datasetStats.common_sizes.slice(0, 4).map((s: any, i: number) => (
+                      <span key={i} className="text-xs px-3 py-1.5 bg-zinc-900 rounded border border-zinc-800 text-zinc-300 font-mono font-medium hover:border-zinc-700 transition-colors">
+                        {s.size}
+                      </span>
+                      ))}
+                    </div>
+                    </div>
+                  )}
+                  </div>
+                </details>
+                )}
+
+              {/* Model & Hyperparameters Accordion */}
+              <details className="group border-2 border-white rounded-xl overflow-hidden bg-black text-white" open>
+                <summary className="flex items-center justify-between p-4 cursor-pointer hover:bg-white hover:text-black transition-colors">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-4 h-4" />
+                    <span className="text-sm font-semibold tracking-wide">Model & Hyperparameters</span>
+                  </div>
+                  <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                </summary>
+                <div className="p-4 pt-2 space-y-6">
               {/* Model Selection */}
               <div className="space-y-2">
                 <label className="text-xs uppercase tracking-wider text-zinc-500 font-semibold">Model Architecture</label>
@@ -1150,7 +1246,19 @@ useEffect(() => {
                   ))}
                 </div>
               </div>
+                </div>
+              </details>
 
+              {/* Advanced Settings Accordion */}
+              <details className="group border-2 border-white rounded-xl overflow-hidden bg-black text-white">
+                <summary className="flex items-center justify-between p-4 cursor-pointer hover:bg-white hover:text-black transition-colors">
+                  <div className="flex items-center gap-2">
+                    <Save className="w-4 h-4" />
+                    <span className="text-sm font-semibold tracking-wide">Advanced Settings</span>
+                  </div>
+                  <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                </summary>
+                <div className="p-4 pt-2 space-y-6">
               {/* Save Path */}
               <div className="space-y-2">
                 <label className="text-xs uppercase tracking-wider text-zinc-500 font-semibold">Checkpoints Output</label>
@@ -1240,17 +1348,20 @@ useEffect(() => {
                   </div>
                 </label>
               </div>
-               {/* Data Augmentation */}
-<div className="pt-6 border-t border-zinc-800/50 space-y-4">
-  <div className="flex items-center gap-2 mb-2">
-    <Activity className="w-4 h-4 text-zinc-400" />
-    <span className="text-xs uppercase tracking-wider text-zinc-500 font-semibold">
-      Data Augmentation
-    </span>
-  </div>
-   <p className="text-xs text-zinc-600">
-  Applies random transformations during training only.
-</p>
+                </div>
+              </details>
+
+              {/* Data Augmentation Accordion */}
+              <details className="group border-2 border-white rounded-xl overflow-hidden bg-black text-white">
+                <summary className="flex items-center justify-between p-4 cursor-pointer hover:bg-white hover:text-black transition-colors">
+                  <div className="flex items-center gap-2">
+                    <Activity className="w-4 h-4" />
+                    <span className="text-sm font-semibold tracking-wide">Data Augmentation</span>
+                  </div>
+                  <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                </summary>
+                <div className="p-4 pt-2 space-y-4">
+                  <p className="text-xs text-zinc-500">Applies random transformations during training only.</p>
   {/* Horizontal Flip */}
   <label className="flex items-center justify-between cursor-pointer group">
     <span className="text-sm text-zinc-400 group-hover:text-zinc-200 transition-colors">
@@ -1380,14 +1491,20 @@ useEffect(() => {
 
 </div>
   
-</div>
-              {/* AutoML Hyperparameter Sweep */}
-              <div className="pt-6 border-t border-zinc-800/50 space-y-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Zap className="w-4 h-4 text-zinc-400" />
-                  <span className="text-xs uppercase tracking-wider text-zinc-500 font-semibold">AutoML Sweep</span>
                 </div>
-                <p className="text-xs text-zinc-600 -mt-2">Automatically find the best learning rate, batch size, and optimizer using Optuna.</p>
+              </details>
+
+              {/* AutoML Hyperparameter Sweep Accordion */}
+              <details className="group border-2 border-white rounded-xl overflow-hidden bg-black text-white">
+                <summary className="flex items-center justify-between p-4 cursor-pointer hover:bg-white hover:text-black transition-colors">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4" />
+                    <span className="text-sm font-semibold tracking-wide">AutoML Hyperparameter Sweep</span>
+                  </div>
+                  <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                </summary>
+                <div className="p-4 pt-2 space-y-4">
+                  <p className="text-xs text-zinc-500">Automatically find the best learning rate, batch size, and optimizer using Optuna.</p>
 
                 <div className="flex items-center gap-3">
                   <div className="flex-1 space-y-1">
@@ -1493,13 +1610,14 @@ useEffect(() => {
                     )}
                   </div>
                 )}
-              </div>
+                </div>
+              </details>
             </div>
           </div>
         </section>
 
         {/* Right Panel: Output */}
-        <section className="lg:col-span-8 flex flex-col gap-6">
+        <section className="lg:col-span-8 flex flex-col gap-6 lg:sticky lg:top-[120px] lg:h-[calc(100vh-150px)]">
             
            {/* Progress Widget */}
            {(isRunning || progress > 0) && (
@@ -1544,7 +1662,7 @@ useEffect(() => {
            )}
 
            {/* Content Tabs */}
-           <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl flex-1 flex flex-col overflow-hidden min-h-[500px] max-h-[80vh] h-[75vh] backdrop-blur-sm">
+           <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl flex-1 flex flex-col overflow-hidden backdrop-blur-sm">
               <div className="flex border-b border-zinc-800/50 px-2 flex-none">
                  <button 
                    onClick={() => setActiveTab('logs')}
@@ -2347,3 +2465,4 @@ useEffect(() => {
     </>
   );
 }
+
