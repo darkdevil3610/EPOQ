@@ -1,6 +1,6 @@
 {
   "productName": "epoch",
-  "version": "0.2.0-beta",
+  "version": "0.2.0",
   "identifier": "com.epoch.dev",
   "build": {
     "beforeDevCommand": "npm run dev",
