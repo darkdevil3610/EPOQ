@@ -143,6 +143,24 @@ async fn check_dependencies(app: tauri::AppHandle) -> Result<String, String> {
     }
 }
 
+/// Analyzes an image dataset and returns statistics.
+#[tauri::command]
+async fn analyze_dataset(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    let script_path = app
+        .path()
+        .resource_dir()
+        .map_err(|e| e.to_string())?
+        .join("python_backend")
+        .join("dataset_analyzer.py");
+
+    let script = script_path.to_string_lossy().to_string().replace("\\\\?\\", "");
+
+    match run_python(&app, &[script.as_str(), "--path", &path]).await {
+        Ok(output) => Ok(output.trim().to_string()),
+        Err(e) => Err(format!("Dataset analysis failed: {}", e)),
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -152,7 +170,8 @@ fn main() {
             run_tabular_processor,
             run_check_gpu,
             get_system_info,
-            check_dependencies
+            check_dependencies,
+            analyze_dataset
         ])
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
