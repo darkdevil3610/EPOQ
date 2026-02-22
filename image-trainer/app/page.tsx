@@ -633,14 +633,19 @@ console.log("Compare B:", compareB);
     compareB.training_metrics.length
   );
 
-  const merged = Array.from({ length: maxEpochs }).map((_, i) => ({
-    epoch: i + 1,
-    A: compareA.training_metrics[i]?.accuracy ?? null,
-    B: compareB.training_metrics[i]?.accuracy ?? null,
-  }));
+  const keyA = `${compareA.model}_${compareA.id}`;
+const keyB = `${compareB.model}_${compareB.id}`;
+
+const merged = Array.from({ length: maxEpochs }).map((_, i) => ({
+  epoch: i + 1,
+  [keyA]: compareA.training_metrics[i]?.accuracy ?? null,
+  [keyB]: compareB.training_metrics[i]?.accuracy ?? null,
+}));
 
   setCompareData(merged);
 }, [compareA, compareB]);
+const keyA = `${compareA?.model}_${compareA?.id}`;
+const keyB = `${compareB?.model}_${compareB?.id}`;
   return (
     <>
       {!depsChecked && <DependencyWizard onComplete={() => setDepsChecked(true)} />}
@@ -1663,16 +1668,48 @@ console.log("Compare B:", compareB);
         {compareData.length > 0 && (
           <div className="h-[350px] w-full mt-6">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={compareData}>
+              <LineChart data={compareData} >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="epoch" />
-                <YAxis domain={[0, 1]} />
+                <XAxis
+  dataKey="epoch"
+  label={{
+    value: "Epoch",
+    position: "bottom",
+    offset: -10
+  }}
+/>
+
+
+<YAxis
+  domain={[0, 1]}
+  label={{
+    value: "Accuracy",
+    angle: -90,
+    position: "insideLeft"
+  }}
+/>
                 <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="A" stroke="#22c55e" strokeWidth={2} />
-                <Line type="monotone" dataKey="B" stroke="#3b82f6" strokeWidth={2} />
+                <Legend verticalAlign="bottom"/>
+                <Line
+  type="monotone"
+  dataKey={keyA}
+  name={compareA?.model}
+  stroke="#22c55e"
+  strokeWidth={2}
+  dot={false}
+/>
+
+<Line
+  type="monotone"
+  dataKey={keyB}
+  name={compareB?.model}
+  stroke="#3b82f6"
+  strokeWidth={2}
+  dot={false}
+/>
               </LineChart>
             </ResponsiveContainer>
+            
           </div>
         )}
       </>
