@@ -590,7 +590,11 @@ const fetchSystemInfo = async (initial = false) => {
     if (initial) setSystemLoading(false);
   }
 };
-
+const getUsageColor = (value: number) => {
+  if (value < 50) return "bg-emerald-500"
+  if (value < 80) return "bg-yellow-500"
+  return "bg-red-500"
+}
   return (
     <>
       {!depsChecked && <DependencyWizard onComplete={() => setDepsChecked(true)} />}
@@ -1379,7 +1383,10 @@ const fetchSystemInfo = async (initial = false) => {
     )}
   >
     <div
-      className="h-full bg-emerald-500 transition-all duration-500"
+      className={cn(
+  "h-full transition-all duration-500",
+  getUsageColor(systemInfo.hardware?.cpu_usage_percent ?? 0)
+)}
       style={{ width: `${systemInfo.hardware?.cpu_usage_percent ?? 0}%` }}
     />
   </div>
@@ -1407,7 +1414,10 @@ const fetchSystemInfo = async (initial = false) => {
 
   <div className="w-full h-2 rounded-full overflow-hidden bg-zinc-300 dark:bg-zinc-800">
     <div
-      className="h-full bg-blue-500 transition-all duration-500"
+      className={cn(
+  "h-full transition-all duration-500",
+  getUsageColor(systemInfo.hardware?.ram_used_percent ?? 0)
+)}
       style={{ width: `${systemInfo.hardware?.ram_used_percent ?? 0}%` }}
     />
   </div>
@@ -1435,6 +1445,20 @@ const fetchSystemInfo = async (initial = false) => {
         </div>
 
         <div className="text-xs text-zinc-500 mt-3 space-y-1">
+          <div
+  className={cn(
+    "w-full h-2 rounded-full overflow-hidden",
+    isLightMode ? "bg-zinc-200" : "bg-zinc-800"
+  )}
+>
+  <div
+    className={cn(
+  "h-full transition-all duration-500",
+  getUsageColor(systemInfo.hardware?.disk_used_percent ?? 0)
+)}
+    style={{ width: `${systemInfo.hardware?.disk_used_percent ?? 0}%` }}
+  />
+</div>
     <div>
       Free: {systemInfo.hardware?.disk_free_gb} GB
     </div>
