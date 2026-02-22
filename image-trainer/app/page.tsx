@@ -6,7 +6,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { resolveResource } from '@tauri-apps/api/path';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { FolderOpen, Play, Square, Save, Activity, Terminal, CheckCircle, AlertCircle, BarChart2, Layers, Download, Cpu, Sun, Moon, Database } from 'lucide-react';
+import { FolderOpen, Play, Square, Save, Activity, Terminal, CheckCircle, AlertCircle, BarChart2, Layers, Download, Cpu, Sun, Moon, Database, Zap, Search } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { save } from '@tauri-apps/plugin-dialog';
@@ -124,6 +124,12 @@ export default function Home() {
   const [systemLoading, setSystemLoading] = useState(false);
   const [systemError, setSystemError] = useState<string | null>(null);
   const [depsChecked, setDepsChecked] = useState(false);
+  // AutoML State
+  const [isAutoMLRunning, setIsAutoMLRunning] = useState(false);
+  const [autoMLTrials, setAutoMLTrials] = useState<{trial: number; n_trials: number; params: {learning_rate: number; batch_size: number; optimizer: string}; val_accuracy: number}[]>([]);
+  const [autoMLBestParams, setAutoMLBestParams] = useState<{learning_rate: number; batch_size: number; optimizer: string} | null>(null);
+  const [autoMLProgress, setAutoMLProgress] = useState(0);
+  const [autoMLTrialCount, setAutoMLTrialCount] = useState(10);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const commandRef = useRef<Command<string> | null>(null);
   const childRef = useRef<any>(null);
@@ -550,7 +556,108 @@ const formatTime = (seconds: number) => {
     String(secs).padStart(2, '0')
   ].filter(Boolean).join(':');
 };
-const exportAsJson = async () => {
+const startAutoML = async () => {
+    if (!datasetPath) {
+      addLog('Please select a dataset path first.', 'error');
+      return;
+    }
+
+    setIsAutoMLRunning(true);
+    setAutoMLTrials([]);
+    setAutoMLBestParams(null);
+    setAutoMLProgress(0);
+    setActiveTab('logs');
+
+    try {
+      const scriptPath = await resolveResource('python_backend/automl_sweep.py');
+      if (!scriptPath) {
+        throw new Error('Failed to resolve automl_sweep.py path.');
+      }
+
+      addLog(`[AutoML] Starting hyperparameter sweep with ${autoMLTrialCount} trials...`, 'info');
+
+      const args = [
+        scriptPath,
+        '--path', datasetPath,
+        '--model', model,
+        '--n_trials', autoMLTrialCount.toString(),
+        '--epochs_per_trial', '3',
+        '--num_workers', numWorkers.toString()
+      ];
+
+      let finalCmd: string;
+      let finalArgs = args;
+
+      if (selectedEnv.startsWith('conda:')) {
+        const envName = selectedEnv.replace('conda:', '');
+        finalCmd = 'conda';
+        finalArgs = ['run', '-n', envName, '--no-capture-output', 'python', ...args];
+      } else {
+        finalCmd = await resolvePythonInterpreter();
+      }
+
+      addLog(`[AutoML] Command: ${finalCmd} ${finalArgs.join(' ')}`, 'info');
+
+      const cmd = Command.create(finalCmd, finalArgs);
+
+      cmd.on('close', (data) => {
+        addLog(`[AutoML] Sweep finished with code ${data.code}`, data.code === 0 ? 'success' : 'error');
+        setIsAutoMLRunning(false);
+      });
+
+      cmd.on('error', (error) => {
+        addLog(`[AutoML] Error: ${error}`, 'error');
+        setIsAutoMLRunning(false);
+      });
+
+      cmd.stdout.on('data', (line) => {
+        try {
+          const data = JSON.parse(line);
+
+          if (data.status === 'automl_started') {
+            addLog(`[AutoML] Sweep started: ${data.n_trials} trials on ${data.device}`, 'info');
+          } else if (data.status === 'automl_info') {
+            addLog(`[AutoML] ${data.message}`, 'info');
+          } else if (data.status === 'automl_trial') {
+            setAutoMLTrials(prev => [...prev, data]);
+            setAutoMLProgress(Math.round((data.trial / data.n_trials) * 100));
+            addLog(`[AutoML] Trial ${data.trial}/${data.n_trials}: lr=${data.params.learning_rate.toExponential(2)}, bs=${data.params.batch_size}, opt=${data.params.optimizer} → acc=${(data.val_accuracy * 100).toFixed(2)}%`, 'info');
+          } else if (data.status === 'automl_trial_error') {
+            addLog(`[AutoML] Trial ${data.trial}/${data.n_trials} failed: ${data.message}`, 'error');
+            setAutoMLProgress(Math.round((data.trial / data.n_trials) * 100));
+          } else if (data.status === 'automl_complete') {
+            setAutoMLBestParams(data.best_params);
+            setAutoMLProgress(100);
+            // Auto-apply best params
+            setLearningRate(data.best_params.learning_rate);
+            setBatchSize(data.best_params.batch_size);
+            addLog(`[AutoML] Sweep complete! Best: lr=${data.best_params.learning_rate.toExponential(2)}, bs=${data.best_params.batch_size}, opt=${data.best_params.optimizer}, acc=${(data.best_accuracy * 100).toFixed(2)}%`, 'success');
+            addLog(`[AutoML] Best learning rate and batch size have been auto-applied to your config.`, 'success');
+          } else if (data.status === 'error') {
+            addLog(`[AutoML] Error: ${data.message}`, 'error');
+          } else {
+            addLog(line, 'info');
+          }
+        } catch {
+          addLog(line, 'info');
+        }
+      });
+
+      cmd.stderr.on('data', (line) => {
+        // Only log actual errors, skip Optuna/torch warnings
+        if (line.trim() && !line.includes('[I ') && !line.includes('[W ')) {
+          addLog(`[AutoML] ${line}`, 'error');
+        }
+      });
+
+      await cmd.spawn();
+    } catch (err) {
+      addLog(`[AutoML] Failed to start sweep: ${err}`, 'error');
+      setIsAutoMLRunning(false);
+    }
+  };
+
+  const exportAsJson = async () => {
   try {
     console.log("Export triggered");
 
@@ -1019,6 +1126,120 @@ const keyB = `${compareB?.model}_${compareB?.id}`;
                     <div className={cn("w-3.5 h-3.5 rounded-full transition-colors", onlyZip ? "bg-black" : "bg-zinc-500")} />
                   </div>
                 </label>
+              </div>
+
+              {/* AutoML Hyperparameter Sweep */}
+              <div className="pt-6 border-t border-zinc-800/50 space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Zap className="w-4 h-4 text-zinc-400" />
+                  <span className="text-xs uppercase tracking-wider text-zinc-500 font-semibold">AutoML Sweep</span>
+                </div>
+                <p className="text-xs text-zinc-600 -mt-2">Automatically find the best learning rate, batch size, and optimizer using Optuna.</p>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 space-y-1">
+                    <label className="text-xs text-zinc-500">Trials</label>
+                    <input
+                      type="number"
+                      min={3}
+                      max={50}
+                      value={autoMLTrialCount}
+                      onChange={(e) => setAutoMLTrialCount(Math.max(3, parseInt(e.target.value) || 10))}
+                      disabled={isAutoMLRunning}
+                      className="w-full bg-black border border-zinc-800 rounded-lg py-2 px-3 text-sm text-zinc-300 focus:border-zinc-600 focus:outline-none transition-colors font-mono disabled:opacity-50"
+                    />
+                  </div>
+                  <div className="flex-1 pt-5">
+                    <button
+                      onClick={startAutoML}
+                      disabled={isAutoMLRunning || isRunning || !datasetPath}
+                      className={cn(
+                        "w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all",
+                        isAutoMLRunning
+                          ? "bg-zinc-800 text-zinc-400 border border-zinc-700 cursor-not-allowed"
+                          : "bg-white text-black hover:bg-zinc-200 shadow-lg shadow-white/5 disabled:opacity-40 disabled:cursor-not-allowed"
+                      )}
+                    >
+                      {isAutoMLRunning ? (
+                        <><span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Searching...</>
+                      ) : (
+                        <><Search className="w-4 h-4" /> Find Optimal Config</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* AutoML Progress */}
+                {(isAutoMLRunning || autoMLTrials.length > 0) && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-xs text-zinc-500">
+                      <span>Progress</span>
+                      <span className="font-mono">{autoMLProgress}%</span>
+                    </div>
+                    <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-white transition-all duration-500 ease-out"
+                        style={{ width: `${autoMLProgress}%` }}
+                      />
+                    </div>
+
+                    {/* Trial Results */}
+                    {autoMLTrials.length > 0 && (
+                      <div className="max-h-48 overflow-y-auto rounded-lg border border-zinc-800 bg-black/50 scrollbar-thin">
+                        <table className="w-full text-xs">
+                          <thead className="sticky top-0 bg-zinc-900/95 backdrop-blur-sm">
+                            <tr>
+                              <th className="px-3 py-2 text-left text-zinc-500 font-medium">#</th>
+                              <th className="px-3 py-2 text-left text-zinc-500 font-medium">LR</th>
+                              <th className="px-3 py-2 text-left text-zinc-500 font-medium">BS</th>
+                              <th className="px-3 py-2 text-left text-zinc-500 font-medium">Opt</th>
+                              <th className="px-3 py-2 text-right text-zinc-500 font-medium">Acc</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-800/50">
+                            {autoMLTrials.map((t, i) => {
+                              const isBest = autoMLBestParams &&
+                                t.params.learning_rate === autoMLBestParams.learning_rate &&
+                                t.params.batch_size === autoMLBestParams.batch_size &&
+                                t.params.optimizer === autoMLBestParams.optimizer;
+                              return (
+                                <tr key={i} className={cn(
+                                  "transition-colors",
+                                  isBest ? "bg-white/5" : "hover:bg-zinc-900/50"
+                                )}>
+                                  <td className="px-3 py-2 text-zinc-400 font-mono">
+                                    {isBest && <span className="mr-1">●</span>}{t.trial}
+                                  </td>
+                                  <td className="px-3 py-2 text-zinc-300 font-mono">{t.params.learning_rate.toExponential(2)}</td>
+                                  <td className="px-3 py-2 text-zinc-300 font-mono">{t.params.batch_size}</td>
+                                  <td className="px-3 py-2 text-zinc-300">{t.params.optimizer}</td>
+                                  <td className={cn("px-3 py-2 text-right font-mono font-semibold", isBest ? "text-emerald-400" : "text-zinc-300")}>
+                                    {(t.val_accuracy * 100).toFixed(2)}%
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Best Result Banner */}
+                    {autoMLBestParams && (
+                      <div className="p-3 rounded-lg bg-zinc-900/50 border border-zinc-800">
+                        <div className="flex items-center gap-2 mb-1">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-xs font-semibold text-zinc-300">Best Config Applied</span>
+                        </div>
+                        <p className="text-xs text-zinc-400">
+                          LR: <span className="text-zinc-300 font-mono font-semibold">{autoMLBestParams.learning_rate.toExponential(2)}</span> · 
+                          Batch: <span className="text-zinc-300 font-mono font-semibold">{autoMLBestParams.batch_size}</span> · 
+                          Optimizer: <span className="text-zinc-300 font-mono font-semibold">{autoMLBestParams.optimizer}</span>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -126,7 +126,7 @@ async fn get_system_info(app: tauri::AppHandle) -> Result<String, String> {
 #[tauri::command]
 async fn check_dependencies(app: tauri::AppHandle) -> Result<String, String> {
     println!("DEBUG: Running backend check_dependencies");
-    let script = "import sys, json, importlib.util; p = lambda x: importlib.util.find_spec(x) is not None; print(json.dumps({'python': True, 'executable': sys.executable, 'version': sys.version.split()[0], 'pandas': p('pandas'), 'sklearn': p('sklearn'), 'torch': p('torch')}))";
+    let script = "import sys, json, importlib.util; p = lambda x: importlib.util.find_spec(x) is not None; print(json.dumps({'python': True, 'executable': sys.executable, 'version': sys.version.split()[0], 'pandas': p('pandas'), 'sklearn': p('sklearn'), 'torch': p('torch'), 'timm': p('timm'), 'optuna': p('optuna')}))";
     match run_python(&app, &["-c", script]).await {
         Ok(output) => {
             println!("DEBUG: Python stdout: {}", output);
@@ -135,7 +135,7 @@ async fn check_dependencies(app: tauri::AppHandle) -> Result<String, String> {
         Err(e) => {
             println!("DEBUG: Python error: {}", e);
             let error_json = format!(
-                "{{\"python\": false, \"version\": null, \"pandas\": false, \"sklearn\": false, \"torch\": false, \"error\": \"{}\"}}",
+                "{{\"python\": false, \"version\": null, \"pandas\": false, \"sklearn\": false, \"torch\": false, \"timm\": false, \"optuna\": false, \"error\": \"{}\"}}",
                 e.replace("\"", "\\\"").replace("\n", " ")
             );
             Ok(error_json)

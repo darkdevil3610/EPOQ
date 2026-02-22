@@ -9,6 +9,8 @@ type DependencyStatus = {
   pandas: boolean;
   sklearn: boolean;
   torch: boolean;
+  timm: boolean;
+  optuna: boolean;
   error?: string;
 };
 
@@ -27,13 +29,13 @@ export default function DependencyWizard({ onComplete }: { onComplete: () => voi
             try {
                 parsed = JSON.parse(raw);
             } catch (e) {
-                parsed = { python: false, version: null, pandas: false, sklearn: false, torch: false, error: raw };
+                parsed = { python: false, version: null, pandas: false, sklearn: false, torch: false, timm: false, optuna: false, error: raw };
             }
             
             console.log("check_dependencies result:", parsed);
             setStatus(parsed);
             
-            if (parsed.python && parsed.pandas && parsed.sklearn && parsed.torch) {
+            if (parsed.python && parsed.pandas && parsed.sklearn && parsed.torch && parsed.timm && parsed.optuna) {
                 // All good, wait briefly and trigger the slide up effect
                 setTimeout(() => {
                     setChecking(false);
@@ -47,7 +49,7 @@ export default function DependencyWizard({ onComplete }: { onComplete: () => voi
             }
         } catch (e) {
             console.error("Failed to invoke check_dependencies", e);
-            setStatus({ python: false, version: null, pandas: false, sklearn: false, torch: false, error: String(e) });
+            setStatus({ python: false, version: null, pandas: false, sklearn: false, torch: false, timm: false, optuna: false, error: String(e) });
             setChecking(false);
         }
     }
@@ -85,7 +87,7 @@ export default function DependencyWizard({ onComplete }: { onComplete: () => voi
         </div>
       </div>
     );
-  } else if (status && status.python && status.pandas && status.sklearn && status.torch) {
+  } else if (status && status.python && status.pandas && status.sklearn && status.torch && status.timm && status.optuna) {
     content = (
       <div className="flex items-center justify-center w-full h-full bg-white backdrop-blur-md">
         <div className="flex flex-col items-center gap-4 text-center transform scale-100 transition-transform duration-500">
@@ -103,6 +105,8 @@ export default function DependencyWizard({ onComplete }: { onComplete: () => voi
       if (status && !status.pandas) missingLibs.push("pandas");
       if (status && !status.sklearn) missingLibs.push("scikit-learn");
       if (status && !status.torch) missingLibs.push("torch");
+      if (status && !status.timm) missingLibs.push("timm");
+      if (status && !status.optuna) missingLibs.push("optuna");
       const pipCommand = `pip install ${missingLibs.join(" ")}`;
 
       content = (
