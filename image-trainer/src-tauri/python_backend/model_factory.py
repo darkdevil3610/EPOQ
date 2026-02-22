@@ -2,7 +2,10 @@ import torch
 import torch.nn as nn
 import torchvision
 from torchvision import models
-from torchvision.models import ResNet18_Weights, ResNet50_Weights, EfficientNet_B0_Weights
+from torchvision.models import (
+    ResNet18_Weights, ResNet50_Weights, EfficientNet_B0_Weights,
+    MobileNet_V3_Large_Weights, ViT_B_16_Weights, ConvNeXt_Tiny_Weights
+)
 
 # --- Custom Blocks ---
 class DeformableBlock(nn.Module):
@@ -61,7 +64,10 @@ def get_available_models():
         'resnet50': 'ResNet50 (Deep)',
         'efficientnet_b0': 'EfficientNet-B0 (Efficient)',
         'dcn': 'Deformable CNN (Advanced)',
-        'eva02': 'EVA-02 ViT (Transformer)'
+        'eva02': 'EVA-02 ViT (Transformer)',
+        'mobilenet_v3': 'MobileNetV3 (Mobile)',
+        'vit_b_16': 'ViT-B/16 (Vision Transformer)',
+        'convnext': 'ConvNeXt (Modern ConvNet)'
     }
 
 def create_model(model_name, num_classes, device):
@@ -97,6 +103,15 @@ def create_model(model_name, num_classes, device):
             print("[Model Factory] Specific EVA-02 tag failed, trying generic 'eva02_base_patch14_224'...", flush=True)
             model = timm.create_model('eva02_base_patch14_224', pretrained=True)
 
+    elif model_name == 'mobilenet_v3':
+        model = models.mobilenet_v3_large(weights=MobileNet_V3_Large_Weights.DEFAULT)
+
+    elif model_name == 'vit_b_16':
+        model = models.vit_b_16(weights=ViT_B_16_Weights.DEFAULT)
+
+    elif model_name == 'convnext':
+        model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT)
+
     else:
         raise ValueError(f"Unknown model name: {model_name}")
 
@@ -121,6 +136,15 @@ def create_model(model_name, num_classes, device):
         # EfficientNet uses a classifier with Dropout
         num_ftrs = model.classifier[1].in_features
         model.classifier[1] = nn.Linear(num_ftrs, num_classes)
+    elif model_name == 'mobilenet_v3':
+        num_ftrs = model.classifier[3].in_features
+        model.classifier[3] = nn.Linear(num_ftrs, num_classes)
+    elif model_name == 'vit_b_16':
+        num_ftrs = model.heads.head.in_features
+        model.heads.head = nn.Linear(num_ftrs, num_classes)
+    elif model_name == 'convnext':
+        num_ftrs = model.classifier[2].in_features
+        model.classifier[2] = nn.Linear(num_ftrs, num_classes)
     else:
         # Standard ResNet approach
         num_ftrs = model.fc.in_features

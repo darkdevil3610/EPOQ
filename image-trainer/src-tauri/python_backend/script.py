@@ -23,7 +23,7 @@ def main():
     parser.add_argument('--path', type=str, required=True, help='Path to dataset')
     parser.add_argument('--epochs', type=int, default=5, help='Number of epochs')
     parser.add_argument('--save_path', type=str, required=False, help='Path to save models')
-    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 'resnet50', 'efficientnet_b0', 'dcn', 'eva02'], help='Model type: resnet18, resnet50, efficientnet_b0, dcn, or eva02')
+    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 'resnet50', 'efficientnet_b0', 'dcn', 'eva02', 'mobilenet_v3', 'vit_b_16', 'convnext'], help='Model type: resnet18, resnet50, efficientnet_b0, dcn, eva02, mobilenet_v3, vit_b_16, or convnext')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate for optimizer')
     parser.add_argument('--zip_dataset', action='store_true', help='Create a zip archive of the dataset')

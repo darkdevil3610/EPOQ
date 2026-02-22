@@ -795,6 +795,9 @@ const getUsageColor = (value: number) => {
                     <option value="efficientnet_b0">EfficientNet-B0 (Efficient)</option>
                     <option value="dcn">DeepCrossNetwork (DCN)</option>
                     <option value="eva02">EVA-02 (Transformer)</option>
+                    <option value="mobilenet_v3">MobileNetV3 (Mobile)</option>
+                    <option value="vit_b_16">ViT-B/16 (Vision Transformer)</option>
+                    <option value="convnext">ConvNeXt (Modern ConvNet)</option>
                   </select>
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
                     <svg className="w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
