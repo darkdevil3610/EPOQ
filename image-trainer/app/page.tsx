@@ -94,6 +94,7 @@ export default function Home() {
   const [onlyZip, setOnlyZip] = useState(false);
   const [patience, setPatience] = useState(5);
   const [resumePath, setResumePath] = useState('');
+  const [evaluateOnly, setEvaluateOnly] = useState(false);
   const [gpuAvailable, setGpuAvailable] = useState<boolean | null>(null);
   const [condaEnvs, setCondaEnvs] = useState<{name: string, isGpu: boolean | null}[]>([]);
   const [selectedEnv, setSelectedEnv] = useState<string>('system');
@@ -134,6 +135,7 @@ export default function Home() {
   const logsEndRef = useRef<HTMLDivElement>(null);
   const commandRef = useRef<Command<string> | null>(null);
   const childRef = useRef<any>(null);
+  const autoMLChildRef = useRef<any>(null);
   const metricsRef = useRef<any[]>([]);
   const [runs, setRuns] = useState<any[]>([]);
 
@@ -467,6 +469,7 @@ useEffect(() => {
       if (onlyZip) args.push('--only_zip');
       args.push('--patience', patience.toString());
       if (resumePath) args.push('--resume', resumePath);
+      if (evaluateOnly) args.push('--evaluate_only');
       args.push('--augmentation', JSON.stringify(augmentationConfig));
 
       let finalCmd: string;
@@ -682,7 +685,8 @@ const startAutoML = async () => {
         }
       });
 
-      await cmd.spawn();
+      const child = await cmd.spawn();
+      autoMLChildRef.current = child;
     } catch (err) {
       addLog(`[AutoML] Failed to start sweep: ${err}`, 'error');
       setIsAutoMLRunning(false);
@@ -1328,6 +1332,15 @@ useEffect(() => {
                     </button>
                   )}
                 </div>
+                {resumePath && (
+                  <label className="flex items-center justify-between cursor-pointer group mt-4">
+                    <span className="text-sm text-zinc-400 group-hover:text-zinc-200 transition-colors">Test Model Directly (Skip Training)</span>
+                    <div className={cn("w-10 h-6 rounded-full border flex items-center px-1 transition-all", evaluateOnly ? "bg-white border-white justify-end" : "bg-zinc-900 border-zinc-700 justify-start")}>
+                      <input type="checkbox" className="hidden" checked={evaluateOnly} onChange={e => setEvaluateOnly(e.target.checked)} />
+                      <div className={cn("w-3.5 h-3.5 rounded-full transition-colors", evaluateOnly ? "bg-black" : "bg-zinc-500")} />
+                    </div>
+                  </label>
+                )}
               </div>
 
               {/* Toggles */}
@@ -1520,22 +1533,29 @@ useEffect(() => {
                     />
                   </div>
                   <div className="flex-1 pt-5">
-                    <button
-                      onClick={startAutoML}
-                      disabled={isAutoMLRunning || isRunning || !datasetPath}
-                      className={cn(
-                        "w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all",
-                        isAutoMLRunning
-                          ? "bg-zinc-800 text-zinc-400 border border-zinc-700 cursor-not-allowed"
-                          : "bg-white text-black hover:bg-zinc-200 shadow-lg shadow-white/5 disabled:opacity-40 disabled:cursor-not-allowed"
-                      )}
-                    >
-                      {isAutoMLRunning ? (
-                        <><span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Searching...</>
-                      ) : (
-                        <><Search className="w-4 h-4" /> Find Optimal Config</>
-                      )}
-                    </button>
+                    {isAutoMLRunning ? (
+                      <button
+                        onClick={() => {
+                          autoMLChildRef.current?.kill();
+                          addLog('[AutoML] Sweep stopped by user.', 'error');
+                          setIsAutoMLRunning(false);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all bg-red-900/20 hover:bg-red-900/30 text-red-200 border border-red-900/30"
+                      >
+                        <Square className="w-4 h-4 fill-current" /> Stop Sweep
+                      </button>
+                    ) : (
+                      <button
+                        onClick={startAutoML}
+                        disabled={isRunning || !datasetPath}
+                        className={cn(
+                          "w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all bg-white text-black hover:bg-zinc-200 shadow-lg shadow-white/5",
+                          (isRunning || !datasetPath) && "opacity-40 cursor-not-allowed"
+                        )}
+                      >
+                        <Search className="w-4 h-4" /> Find Optimal Config
+                      </button>
+                    )}
                   </div>
                 </div>
 
