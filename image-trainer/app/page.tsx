@@ -1054,11 +1054,11 @@ const InsightCard = ({ title, children }: any) => (
                   <button 
                      onClick={() => datasetPath && analyzeDataset(datasetPath)}
                      disabled={!datasetPath || analyzingDataset}
-                     className="p-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                     className="p-2.5 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                      title="Analyze Dataset"
                   >
                     {analyzingDataset ? (
-                      <div className="w-5 h-5 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                      <div className="w-5 h-5 border-2 border-zinc-500 dark:border-zinc-400 border-t-transparent rounded-full animate-spin" />
                     ) : (
                       <Search className="w-5 h-5" />
                     )}
@@ -1066,47 +1066,56 @@ const InsightCard = ({ title, children }: any) => (
                 </div>
               </div>
 
-              {/* Dataset Statistics Display */}
-              {datasetStats && datasetStats.status === 'success' && (
-                <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-xl space-y-3">
-                  <div className="flex items-center gap-2 text-zinc-300 font-medium">
-                    <Database className="w-4 h-4" />
-                    Dataset Statistics
+                {/* Dataset Statistics Display */}
+                {datasetStats && datasetStats.status === 'success' && (
+                <div className={cn("mt-4 p-4 border rounded-xl", isLightMode ? "bg-zinc-100 border-zinc-300" : "bg-zinc-900/50 border-zinc-800")}>
+                  <div className="flex items-center justify-between mb-4">
+                  <div className={cn("flex items-center gap-2 text-sm font-medium", isLightMode ? "text-zinc-700" : "text-zinc-200")}>
+                    <div className={cn("p-1.5 rounded-lg", isLightMode ? "bg-zinc-200" : "bg-zinc-800")}>
+                    <Database className={cn("w-4 h-4", isLightMode ? "text-zinc-600" : "text-zinc-300")} />
+                    </div>
+                      <span>Dataset Overview</span>
+                    </div>
+                    <div className="text-xs text-zinc-500 font-mono">
+                      {datasetStats.total_images} images
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div className="bg-black/40 rounded-lg p-3 border border-zinc-800">
-                      <div className="text-xs text-zinc-500 uppercase tracking-wider">Total Images</div>
-                      <div className="text-lg font-semibold text-white">{datasetStats.total_images}</div>
+                  
+                  {/* Stats Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <div className="bg-zinc-200/50 dark:bg-black/30 rounded-lg p-3 border border-zinc-300 light:border-zinc-800">
+                      <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Total Images</div>
+                      <div className="text-sm font-bold text-zinc-800 dark:text-white mt-1">{datasetStats.total_images}</div>
                     </div>
-                    <div className="bg-black/40 rounded-lg p-3 border border-zinc-800">
-                      <div className="text-xs text-zinc-500 uppercase tracking-wider">Classes</div>
-                      <div className="text-lg font-semibold text-white">{datasetStats.class_count}</div>
+                    <div className="bg-zinc-200/50 dark:bg-black/30 rounded-lg p-3 border border-zinc-300 light:border-zinc-800">
+                      <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Classes</div>
+                      <div className="text-sm font-bold text-zinc-800 dark:text-white mt-1">{datasetStats.class_count}</div>
                     </div>
-                    <div className="bg-black/40 rounded-lg p-3 border border-zinc-800">
-                      <div className="text-xs text-zinc-500 uppercase tracking-wider">Avg Size</div>
-                      <div className="text-lg font-semibold text-white">{datasetStats.avg_image_size || 'N/A'}</div>
+                    <div className="bg-zinc-200/50 dark:bg-black/30 rounded-lg p-3 border border-zinc-300 light:border-zinc-800">
+                      <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Avg Size</div>
+                      <div className="text-sm font-bold text-zinc-800 dark:text-white mt-1 truncate">{datasetStats.avg_image_size || 'N/A'}</div>
                     </div>
-                    <div className="bg-black/40 rounded-lg p-3 border border-zinc-800">
-                      <div className="text-xs text-zinc-500 uppercase tracking-wider">Splits</div>
-                      <div className="text-lg font-semibold text-white">
-                        {Object.entries(datasetStats.splits || {}).filter(([k, v]: [string, any]) => v > 0).length}
+                    <div className="bg-zinc-200/50 dark:bg-black/30 rounded-lg p-3 border border-zinc-300 light:border-zinc-800">
+                      <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Splits</div>
+                      <div className="text-sm font-bold text-zinc-800 dark:text-white mt-1">
+                      {Object.entries(datasetStats.splits || {}).filter(([, v]: [string, any]) => v > 0).length}
                       </div>
                     </div>
-                  </div>
-                  {datasetStats.splits && Object.keys(datasetStats.splits).length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(datasetStats.splits).map(([split, count]: [string, any]) => (
-                        count > 0 && (
-                          <span key={split} className="text-xs bg-zinc-800 text-zinc-300 px-2 py-1 rounded-full">
-                            {split}: {count}
-                          </span>
-                        )
-                      ))}
                     </div>
-                  )}
+                  
+      
+                  
+                  {/* Common Sizes */}
                   {datasetStats.common_sizes && datasetStats.common_sizes.length > 0 && (
-                    <div className="text-xs text-zinc-500">
-                      Common sizes: {datasetStats.common_sizes.map((s: any) => s.size).join(', ')}
+                    <div className="mt-3 pt-3 border-t border-zinc-300 light:border-zinc-800">
+                      <div className="text-[10px] text-zinc-600 dark:text-zinc-400 uppercase tracking-wider mb-1.5 font-semibold">Common Resolutions</div>
+                      <div className="flex flex-wrap gap-1.5">
+                      {datasetStats.common_sizes.slice(0, 4).map((s: any, i: number) => (
+                        <span key={i} className="text-xs px-2 py-1 bg-zinc-100 dark:bg-zinc-800 rounded border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 font-mono font-medium">
+                        {s.size}
+                        </span>
+                      ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2212,3 +2221,4 @@ const InsightCard = ({ title, children }: any) => (
     </>
   );
 }
+
