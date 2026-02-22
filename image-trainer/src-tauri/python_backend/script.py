@@ -275,6 +275,10 @@ def main():
         print("Starting training loop...", flush=True)
 
         for epoch in range(start_epoch, num_epochs):
+            train_acc_epoch = 0.0
+            train_loss_epoch = 0.0
+            val_acc_epoch = 0.0
+            val_loss_epoch = 0.0
             for phase in ['train', 'val']:
                 if dataset_sizes[phase] == 0:
                     continue # Skip empty phase
@@ -307,6 +311,13 @@ def main():
                 
                 epoch_loss = running_loss / dataset_sizes[phase]
                 epoch_acc = running_corrects.double() / dataset_sizes[phase]
+                if phase == 'train':
+                    train_loss_epoch = epoch_loss
+                    train_acc_epoch = epoch_acc.item()
+
+                elif phase == 'val':
+                    val_loss_epoch = epoch_loss
+                    val_acc_epoch = epoch_acc.item()
                 
                 if phase == 'val':
                     # --- Save best model when accuracy improves ---
@@ -337,11 +348,13 @@ def main():
                         epochs_no_improve += 1
 
                     status_update = {
-                        "epoch": epoch + 1,
-                        "total_epochs": num_epochs,
-                        "accuracy": f"{epoch_acc:.4f}",
-                        "loss": f"{epoch_loss:.4f}",
-                        "status": "training"
+                    "epoch": epoch + 1,
+                    "total_epochs": num_epochs,
+                    "train_accuracy": f"{train_acc_epoch:.4f}",
+                    "train_loss": f"{train_loss_epoch:.4f}",
+                    "val_accuracy": f"{val_acc_epoch:.4f}",
+                    "val_loss": f"{val_loss_epoch:.4f}",
+                    "status": "training"
                     }
                     print(json.dumps(status_update), flush=True)
 

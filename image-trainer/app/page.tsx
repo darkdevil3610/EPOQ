@@ -26,8 +26,10 @@ interface LogEntry {
 interface TrainingStatus {
   epoch: number;
   total_epochs: number;
-  accuracy: string;
-  loss: string;
+  train_accuracy: string;
+  train_loss: string;
+  val_accuracy: string;
+  val_loss: string;
   status: string;
   learning_rate?: string;
 }
@@ -110,7 +112,7 @@ export default function Home() {
   const [evalResult, setEvalResult] = useState<EvalResult | null>(null);
   const [matrixImageUrl, setMatrixImageUrl] = useState<string | null>(null);
   const [imageLoadError, setImageLoadError] = useState(false);
-  const [activeTab, setActiveTab] = useState<'logs' | 'charts' | 'results' | 'data' | 'system' | 'compare'>('logs');
+  const [activeTab, setActiveTab] = useState<'logs' | 'charts' | 'results' | 'data' | 'system' | 'compare' | 'insights'>('logs');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   // Tabular / GPU state
   const [tabFile, setTabFile] = useState('');
@@ -484,10 +486,12 @@ useEffect(() => {
   setCurrentStatus(data);
 
   const newPoint = {
-    epoch: data.epoch,
-    accuracy: parseFloat(data.accuracy),
-    loss: parseFloat(data.loss),
-  };
+  epoch: data.epoch,
+  accuracy: parseFloat(data.train_accuracy),
+  loss: parseFloat(data.train_loss),
+  val_accuracy: parseFloat(data.val_accuracy),
+  val_loss: parseFloat(data.val_loss),
+};
 
   metricsRef.current.push(newPoint);
   setChartData([...metricsRef.current]);
@@ -646,6 +650,91 @@ const merged = Array.from({ length: maxEpochs }).map((_, i) => ({
 }, [compareA, compareB]);
 const keyA = `${compareA?.model}_${compareA?.id}`;
 const keyB = `${compareB?.model}_${compareB?.id}`;
+// ===== INSIGHTS CALCULATIONS =====
+const hasMetrics = chartData.length > 0;
+
+const peakAccuracy = hasMetrics
+  ? Math.max(...chartData.map(d => d.accuracy))
+  : 0;
+
+const lowestLoss = hasMetrics
+  ? Math.min(...chartData.map(d => d.loss))
+  : 0;
+
+const bestEpoch = hasMetrics
+  ? chartData.find(d => d.accuracy === peakAccuracy)?.epoch
+  : null;
+
+const accuracyGain = hasMetrics
+  ? chartData[chartData.length - 1].accuracy - chartData[0].accuracy
+  : 0;
+  let overfitGap = 0;
+
+if (hasMetrics && chartData.length > 0) {
+  const last = chartData[chartData.length - 1];
+
+  if (last.val_accuracy !== undefined) {
+    overfitGap = last.accuracy - last.val_accuracy;
+  }
+}
+
+// Simple trend detection
+let trainingTrend = "Stable";
+
+
+if (hasMetrics && chartData.length > 3) {
+  const last = chartData[chartData.length - 1].accuracy;
+  const prev = chartData[chartData.length - 3].accuracy;
+
+  if (last > prev) trainingTrend = "Improving";
+  else if (last < prev) trainingTrend = "Degrading";
+}
+// ===== ADVANCED INSIGHTS =====
+
+let convergenceEpoch = null;
+let stabilityScore = 0;
+let efficiencyScore = 0;
+let recommendation = "Training looks healthy.";
+
+if (hasMetrics && chartData.length > 3) {
+
+  // Convergence detection (when improvement becomes minimal)
+  for (let i = 1; i < chartData.length; i++) {
+    const diff = chartData[i].accuracy - chartData[i - 1].accuracy;
+    if (Math.abs(diff) < 0.001) {
+      convergenceEpoch = chartData[i].epoch;
+      break;
+    }
+  }
+
+  // Stability (variance of last 3 accuracies)
+  const lastThree = chartData.slice(-3).map(d => d.accuracy);
+  const mean = lastThree.reduce((a, b) => a + b, 0) / lastThree.length;
+  const variance = lastThree.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / lastThree.length;
+  stabilityScore = variance;
+
+  // Efficiency score (gain per epoch)
+  efficiencyScore = accuracyGain / chartData.length;
+
+  // Recommendation logic
+  if (trainingTrend === "Degrading") {
+    recommendation = "Model accuracy is dropping. Consider reducing learning rate.";
+  } else if (convergenceEpoch && convergenceEpoch < chartData.length - 2) {
+    recommendation = "Model converged early. You may reduce total epochs.";
+  } else if (accuracyGain < 0.01) {
+    recommendation = "Minimal improvement. Try tuning hyperparameters.";
+  }
+}
+const InsightCard = ({ title, children }: any) => (
+  <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6">
+    <div className="text-xs text-zinc-500 uppercase tracking-wider mb-2">
+      {title}
+    </div>
+    <div className="text-2xl font-bold font-mono">
+      {children}
+    </div>
+  </div>
+);
   return (
     <>
       {!depsChecked && <DependencyWizard onComplete={() => setDepsChecked(true)} />}
@@ -1045,7 +1134,9 @@ const keyB = `${compareB?.model}_${compareB?.id}`;
                     </div>
                     <div className="text-right flex flex-col items-end">
    <div className="text-3xl font-bold font-mono text-white tracking-tighter">
-     {currentStatus?.accuracy ? `${(parseFloat(currentStatus.accuracy)*100).toFixed(2)}%` : "0.00%"}
+     {currentStatus?.train_accuracy
+  ? `${(parseFloat(currentStatus.train_accuracy)*100).toFixed(2)}%`
+  : "0.00%"}
    </div>
    <div className="text-xs text-zinc-500 uppercase tracking-wider mt-1">
      Accuracy
@@ -1115,6 +1206,17 @@ const keyB = `${compareB?.model}_${compareB?.id}`;
               )}
             >
               <BarChart2 className="w-4 h-4" /> Compare
+            </button>
+            <button
+              onClick={() => setActiveTab('insights')}
+              className={cn(
+                "px-6 py-4 text-sm font-medium border-b-2 transition-all flex items-center gap-2",
+                activeTab === 'insights'
+                  ? "border-white text-white"
+                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              <Activity className="w-4 h-4" /> Insights
             </button>
               </div>
 
@@ -1715,6 +1817,84 @@ const keyB = `${compareB?.model}_${compareB?.id}`;
       </>
     )}
   </div>
+)}
+{activeTab === 'insights' && (
+  
+  <div className="p-8">
+
+  {!hasMetrics ? (
+    <div className="text-center text-zinc-500 mt-20">
+      Run training to generate insights.
+    </div>
+  ) : (
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        <InsightCard title="Peak Accuracy">
+          <span className="text-emerald-400">
+            {(peakAccuracy * 100).toFixed(2)}%
+          </span>
+        </InsightCard>
+
+        <InsightCard title="Best Epoch">
+          {bestEpoch}
+        </InsightCard>
+
+        <InsightCard title="Lowest Loss">
+          <span className="text-red-400">
+            {lowestLoss.toFixed(4)}
+          </span>
+        </InsightCard>
+
+        <InsightCard title="Accuracy Gain">
+          <span className={accuracyGain >= 0 ? "text-emerald-400" : "text-red-400"}>
+            {(accuracyGain * 100).toFixed(2)}%
+          </span>
+        </InsightCard>
+
+        <InsightCard title="Training Trend">
+          <span className={
+            trainingTrend === "Improving"
+              ? "text-emerald-400"
+              : trainingTrend === "Degrading"
+              ? "text-red-400"
+              : "text-yellow-400"
+          }>
+            {trainingTrend}
+          </span>
+        </InsightCard>
+
+        <InsightCard title="Convergence Epoch">
+          {convergenceEpoch ?? "Not Detected"}
+        </InsightCard>
+
+        <InsightCard title="Stability Variance">
+          {stabilityScore.toFixed(6)}
+        </InsightCard>
+
+        <InsightCard title="Efficiency Score">
+          {(efficiencyScore * 100).toFixed(4)}%
+        </InsightCard>
+
+        <InsightCard title="Overfitting Gap">
+          <span className={overfitGap > 0.05 ? "text-red-400" : "text-emerald-400"}>
+            {(overfitGap * 100).toFixed(2)}%
+          </span>
+        </InsightCard>
+
+      </div>
+
+      <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 mt-8">
+        <div className="text-xs text-zinc-500 uppercase tracking-wider mb-3">
+          Recommendation
+        </div>
+        <div className="text-sm text-zinc-300">
+          {recommendation}
+        </div>
+      </div>
+    </>
+  )}
+</div>
 )}
 
               </div>
