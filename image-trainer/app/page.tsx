@@ -11,7 +11,6 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
-import DependencyWizard from './components/DependencyWizard';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -126,7 +125,6 @@ export default function Home() {
   const [systemInfo, setSystemInfo] = useState<any | null>(null);
   const [systemLoading, setSystemLoading] = useState(false);
   const [systemError, setSystemError] = useState<string | null>(null);
-  const [depsChecked, setDepsChecked] = useState(false);
   // AutoML State
   const [isAutoMLRunning, setIsAutoMLRunning] = useState(false);
   const [autoMLTrials, setAutoMLTrials] = useState<{trial: number; n_trials: number; params: {learning_rate: number; batch_size: number; optimizer: string}; val_accuracy: number}[]>([]);
@@ -846,8 +844,7 @@ const InsightCard = ({ title, children }: any) => (
 );
   return (
     <>
-      {!depsChecked && <DependencyWizard onComplete={() => setDepsChecked(true)} />}
-      <div data-theme={isLightMode ? 'light' : 'dark'} className={`min-h-screen font-sans bg-black text-zinc-100 theme-transition ${!depsChecked ? 'h-screen overflow-hidden' : ''}`}>
+      <div data-theme={isLightMode ? 'light' : 'dark'} className={`min-h-screen font-sans bg-black text-zinc-100 theme-transition`}>
       {/* Header */}
       <header className="sticky top-0 z-50 flex items-center justify-between bg-black/80 backdrop-blur-md border-b border-zinc-800/50 px-8 py-4 mb-8">
         <div className="flex items-center gap-4">
