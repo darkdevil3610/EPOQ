@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import GPUStatus from "./components/GPUStatus";
 import DependencyWizard from "./components/DependencyWizard";
+import QRCodeConnect from "./components/QRCodeConnect";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -374,19 +375,22 @@ export default function Home() {
               <span className="text-zinc-500 text-sm font-medium">EPOQ</span>
             </div>
 
-            <button
-              id="gpu-check-btn"
-              onClick={checkGpu}
-              disabled={gpuLoading}
-              className="flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors"
-            >
-              {gpuLoading ? (
-                <span className="inline-block w-3.5 h-3.5 border-2 border-zinc-400/30 border-t-zinc-400 rounded-full animate-spin" />
-              ) : (
-                <span>⬡</span>
-              )}
-              Check GPU
-            </button>
+            <div className="flex items-center gap-3">
+              <QRCodeConnect />
+              <button
+                id="gpu-check-btn"
+                onClick={checkGpu}
+                disabled={gpuLoading}
+                className="flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors"
+              >
+                {gpuLoading ? (
+                  <span className="inline-block w-3.5 h-3.5 border-2 border-zinc-400/30 border-t-zinc-400 rounded-full animate-spin" />
+                ) : (
+                  <span>⬡</span>
+                )}
+                Check GPU
+              </button>
+            </div>
           </header>
 
           {/* ── Tabs ── */}

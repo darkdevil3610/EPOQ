@@ -185,8 +185,64 @@ async fn analyze_dataset(app: tauri::AppHandle, path: String) -> Result<String, 
         Err(e) => Err(format!("Dataset analysis failed: {}", e)),
     }
 }
+use futures_util::{StreamExt, SinkExt};
+use std::sync::{Arc, Mutex};
+use tauri::Emitter;
+use tokio::net::TcpListener;
+use tokio_tungstenite::accept_async;
+use tokio_tungstenite::tungstenite::Message;
+
+struct AppState {
+    clients: Arc<Mutex<Vec<tokio::sync::mpsc::UnboundedSender<Message>>>>,
+    token: Arc<Mutex<String>>,
+}
+
+#[tauri::command]
+fn get_connection_details(state: tauri::State<AppState>) -> Result<String, String> {
+    use local_ip_address::local_ip;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let my_local_ip = match local_ip() {
+        Ok(ip) => ip.to_string(),
+        Err(e) => return Err(format!("Failed to get local IP: {}", e)),
+    };
+
+    // Use current time to generate a makeshift 6-digit pin
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    
+    // Generate a 6-digit PIN
+    let token = (now % 900_000) + 100_000;
+    
+    // Store token in global state
+    *state.token.lock().unwrap() = token.to_string();
+
+    let json = format!(
+        "{{\"ip\": \"{}\", \"port\": 8765, \"token\": \"{}\"}}",
+        my_local_ip, token
+    );
+
+    Ok(json)
+}
+
+#[tauri::command]
+fn broadcast_log(log: String, state: tauri::State<AppState>) {
+    let mut clients = state.clients.lock().unwrap();
+    // broadcast and remove dead channels
+    clients.retain(|client| client.send(Message::Text(log.clone().into())).is_ok());
+}
+
 fn main() {
+    let clients: Arc<Mutex<Vec<tokio::sync::mpsc::UnboundedSender<Message>>>> = Arc::new(Mutex::new(Vec::new()));
+    let token = Arc::new(Mutex::new(String::new()));
+    
+    let clients_clone = clients.clone();
+    let token_clone = token.clone();
+
     tauri::Builder::default()
+        .manage(AppState { clients, token })
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -196,13 +252,73 @@ fn main() {
             get_system_info,
             check_dependencies,
             fetch_runs,
-            analyze_dataset
-
+            analyze_dataset,
+            get_connection_details,
+            broadcast_log
         ])
-        .setup(|app| {
+        .setup(move |app| {
             let window = app.get_webview_window("main").unwrap();
             let icon = tauri::include_image!("icons/icon.png");
             window.set_icon(icon).unwrap();
+            
+            let app_handle = app.handle().clone();
+            
+            tauri::async_runtime::spawn(async move {
+                let listener = match TcpListener::bind("0.0.0.0:8765").await {
+                    Ok(l) => l,
+                    Err(e) => {
+                        println!("Failed to bind WebSocket on port 8765: {}", e);
+                        return;
+                    }
+                };
+                
+                println!("WebSocket server listening on port 8765");
+                
+                while let Ok((stream, _)) = listener.accept().await {
+                    let app_handle = app_handle.clone();
+                    let clients = clients_clone.clone();
+                    let token = token_clone.clone();
+                    
+                    tauri::async_runtime::spawn(async move {
+                        if let Ok(ws_stream) = accept_async(stream).await {
+                            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+                            clients.lock().unwrap().push(tx.clone());
+                            
+                            let (mut write, mut read) = ws_stream.split();
+                            
+                            // Task to forward messages from the channel to the websocket
+                            tauri::async_runtime::spawn(async move {
+                                while let Some(msg) = rx.recv().await {
+                                    if write.send(msg).await.is_err() {
+                                        break;
+                                    }
+                                }
+                            });
+
+                            // Handle incoming messages from the mobile client
+                            while let Some(Ok(Message::Text(text))) = read.next().await {
+                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text.to_string()) {
+                                    if let Some(action) = json.get("action").and_then(|a| a.as_str()) {
+                                        if action == "auth" {
+                                            let req_token = json.get("token").and_then(|t| t.as_str()).unwrap_or("");
+                                            let valid = token.lock().unwrap().clone();
+                                            if req_token == valid && !valid.is_empty() {
+                                                let _ = tx.send(Message::Text(r#"{"status": "authenticated"}"#.to_string().into()));
+                                            } else {
+                                                let _ = tx.send(Message::Text(r#"{"status": "auth_failed"}"#.to_string().into()));
+                                                break;
+                                            }
+                                        } else if action == "stop_training" {
+                                            app_handle.emit("mobile_command", "stop_training").unwrap();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+
             Ok(())
         })
         .run(tauri::generate_context!())

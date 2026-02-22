@@ -5,12 +5,14 @@ import { Command } from '@tauri-apps/plugin-shell';
 import { open } from '@tauri-apps/plugin-dialog';
 import { resolveResource } from '@tauri-apps/api/path';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { FolderOpen, Play, Square, Save, Activity, Terminal, CheckCircle, AlertCircle, BarChart2, Layers, Download, Cpu, Sun, Moon, Database, Zap, Search, History } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
+import QRCodeConnect from './components/QRCodeConnect';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -260,6 +262,29 @@ export default function Home() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isRunning, datasetPath, showPresets, showExperiments]);
+
+  // Listen for mobile commands
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    
+    const setupListener = async () => {
+      unlisten = await listen<string>('mobile_command', (event) => {
+        if (event.payload === 'stop_training') {
+          addLog('⏹️ Stop command received from Mobile App!', 'error');
+          if (childRef.current) childRef.current.kill();
+          if (autoMLChildRef.current) autoMLChildRef.current.kill();
+          setIsRunning(false);
+          setIsAutoMLRunning(false);
+        }
+      });
+    };
+    
+    setupListener();
+    
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
 
   const applyPreset = (preset: Preset) => {
     setEpochs(preset.epochs);
@@ -515,6 +540,8 @@ useEffect(() => {
       });
 
       cmd.stdout.on('data', (line) => {
+        // Broadcast to mobile app clients
+        invoke('broadcast_log', { log: line }).catch(console.error);
         try {
           const data = JSON.parse(line);
           
@@ -567,6 +594,7 @@ useEffect(() => {
       });
 
       cmd.stderr.on('data', (line) => {
+        invoke('broadcast_log', { log: line }).catch(console.error);
         addLog(line, 'error');
       });
 
@@ -646,6 +674,7 @@ const startAutoML = async () => {
       });
 
       cmd.stdout.on('data', (line) => {
+        invoke('broadcast_log', { log: line }).catch(console.error);
         try {
           const data = JSON.parse(line);
 
@@ -679,6 +708,7 @@ const startAutoML = async () => {
       });
 
       cmd.stderr.on('data', (line) => {
+        invoke('broadcast_log', { log: line }).catch(console.error);
         // Only log actual errors, skip Optuna/torch warnings
         if (line.trim() && !line.includes('[I ') && !line.includes('[W ')) {
           addLog(`[AutoML] ${line}`, 'error');
@@ -920,6 +950,7 @@ useEffect(() => {
               {gpuAvailable === null ? 'Checking...' : gpuAvailable ? 'GPU Available' : 'CPU Only'}
             </span>
           </div>
+          <QRCodeConnect />
           {/* Recent Experiments Button */}
           <div className="relative">
             <button 
