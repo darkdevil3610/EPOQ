@@ -7,6 +7,26 @@ import sys
 import json
 import os
 import argparse
+import subprocess
+
+def emit(obj):
+    """Print JSON to stdout for frontend consumption."""
+    print(json.dumps(obj), flush=True)
+
+def _install_missing(module_name, pip_name=None):
+    if pip_name is None:
+        pip_name = module_name
+    try:
+        __import__(module_name)
+    except ImportError:
+        emit({"status": "automl_info", "message": f"Installing missing dependency: {pip_name}..."})
+        subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name])
+
+# Auto-install dependencies before real imports
+_install_missing("optuna")
+_install_missing("torch")
+_install_missing("torchvision")
+_install_missing("sklearn", "scikit-learn")
 
 import optuna
 optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -18,9 +38,7 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
 
 
-def emit(obj):
-    """Print JSON to stdout for frontend consumption."""
-    print(json.dumps(obj), flush=True)
+
 
 
 def build_dataloaders(data_dir, batch_size, num_workers):

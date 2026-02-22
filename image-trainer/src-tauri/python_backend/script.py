@@ -3,6 +3,28 @@ import json
 import time
 import argparse
 import os
+import subprocess
+
+def _install_missing(module_name, pip_name=None):
+    if pip_name is None:
+        pip_name = module_name
+    try:
+        __import__(module_name)
+    except ImportError:
+        print(json.dumps({"status": "info", "message": f"Installing missing dependency: {pip_name}..."}), flush=True)
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name])
+        except Exception as e:
+            print(json.dumps({"status": "error", "message": f"Failed to install {pip_name}: {e}"}), flush=True)
+
+_install_missing("torch")
+_install_missing("torchvision")
+_install_missing("numpy")
+_install_missing("sklearn", "scikit-learn")
+_install_missing("pandas")
+_install_missing("matplotlib")
+_install_missing("seaborn")
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
