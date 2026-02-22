@@ -16,35 +16,69 @@ const EnergyBeam: React.FC<EnergyBeamProps> = ({
     className = ""
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
-    const scriptLoadedRef = useRef(false);
 
     useEffect(() => {
+        let sceneInstance: any = null;
+        let isMounted = true;
+        let scriptElement: HTMLScriptElement | null = null;
+        let loadHandler: (() => void) | null = null;
+
+        const initScene = () => {
+            if (window.UnicornStudio && containerRef.current) {
+                // Initialize the Unicorn Studio project
+                // The library automatically picks up data-us-* attributes
+                window.UnicornStudio.init().then((scenes: any[]) => {
+                    if (isMounted && scenes && scenes.length > 0) {
+                        // Find the scene associated with THIS container
+                        sceneInstance = scenes.find((s: any) => s.element === containerRef.current) || scenes[0];
+                        console.log('Unicorn Studio initialized');
+                    } else if (!isMounted && scenes) {
+                        // If unmounted during init, destroy immediately
+                        scenes.forEach((s: any) => s.destroy());
+                    }
+                }).catch((err: any) => {
+                    console.error('Error initializing Unicorn Studio:', err);
+                });
+            }
+        };
+
         const loadScript = () => {
-            if (scriptLoadedRef.current) return;
+            if (window.UnicornStudio) {
+                initScene();
+                return;
+            }
 
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v1.5.2/dist/unicornStudio.umd.js';
-            script.async = true;
+            const scriptUrl = 'https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v1.5.2/dist/unicornStudio.umd.js';
+            let script = document.querySelector(`script[src="${scriptUrl}"]`) as HTMLScriptElement;
 
-            script.onload = () => {
-                scriptLoadedRef.current = true;
-                if (window.UnicornStudio && containerRef.current) {
-                    console.log('Unicorn Studio loaded, initializing project...');
-                    // Initialize the Unicorn Studio project
-                    window.UnicornStudio.init();
-                }
+            if (!script) {
+                script = document.createElement('script');
+                script.src = scriptUrl;
+                script.async = true;
+                document.head.appendChild(script);
+            }
+
+            scriptElement = script;
+            loadHandler = () => {
+                if (isMounted) initScene();
             };
 
-            document.head.appendChild(script);
-
-            return () => {
-                if (script.parentNode) {
-                    script.parentNode.removeChild(script);
-                }
-            };
+            script.addEventListener('load', loadHandler);
         };
 
         loadScript();
+
+        return () => {
+            isMounted = false;
+
+            if (scriptElement && loadHandler) {
+                scriptElement.removeEventListener('load', loadHandler);
+            }
+
+            if (sceneInstance && typeof sceneInstance.destroy === 'function') {
+                sceneInstance.destroy();
+            }
+        };
     }, [projectId]);
 
     return (
@@ -52,6 +86,9 @@ const EnergyBeam: React.FC<EnergyBeamProps> = ({
             <div
                 ref={containerRef}
                 data-us-project={projectId}
+                data-us-scale="1" 
+                data-us-fps="60"    
+                data-us-dpi="0.9"   
                 className="w-full h-full"
             />
         </div>
