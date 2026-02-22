@@ -135,6 +135,9 @@ export default function Home() {
   const commandRef = useRef<Command<string> | null>(null);
   const childRef = useRef<any>(null);
   const metricsRef = useRef<any[]>([]);
+  // Dataset Analysis State
+  const [datasetStats, setDatasetStats] = useState<any | null>(null);
+  const [analyzingDataset, setAnalyzingDataset] = useState(false);
   // Check GPU availability
   useEffect(() => {
     async function checkGpu() {
@@ -341,10 +344,33 @@ useEffect(() => {
       if (selected && typeof selected === 'string') {
         setDatasetPath(selected);
         if (!savePath) setSavePath(selected);
+        // Auto-analyze the dataset when selected
+        analyzeDataset(selected);
       }
     } catch (err) {
       console.error(err);
       addLog(`Failed to open dialog: ${err}`, 'error');
+    }
+  };
+
+  const analyzeDataset = async (path: string) => {
+    if (!path) return;
+    setAnalyzingDataset(true);
+    setDatasetStats(null);
+    try {
+      const result = await invoke<string>('analyze_dataset', { path });
+      const parsed = JSON.parse(result);
+      setDatasetStats(parsed);
+      if (parsed.status === 'success') {
+        addLog(`Dataset analyzed: ${parsed.total_images} images, ${parsed.class_count} classes`, 'success');
+      } else {
+        addLog(`Dataset analysis failed: ${parsed.message}`, 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      addLog(`Failed to analyze dataset: ${err}`, 'error');
+    } finally {
+      setAnalyzingDataset(false);
     }
   };
 
@@ -1024,8 +1050,70 @@ const InsightCard = ({ title, children }: any) => (
                   >
                     <FolderOpen className="w-5 h-5" />
                   </button>
+                  <button 
+                     onClick={() => datasetPath && analyzeDataset(datasetPath)}
+                     disabled={!datasetPath || analyzingDataset}
+                     className="p-2.5 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                     title="Analyze Dataset"
+                  >
+                    {analyzingDataset ? (
+                      <div className="w-5 h-5 border-2 border-zinc-500 dark:border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Search className="w-5 h-5" />
+                    )}
+                  </button>
                 </div>
               </div>
+
+                {/* Dataset Statistics Display */}
+                {datasetStats && datasetStats.status === 'success' && (
+                <details className="group border-2 border-white rounded-xl overflow-hidden bg-black text-white">
+                  <summary className="flex items-center justify-between p-4 cursor-pointer hover:bg-white hover:text-black transition-colors">
+                  <div className="flex items-center gap-2">
+                    <Database className="w-4 h-4" />
+                    <span className="text-sm font-semibold tracking-wide">Dataset Overview</span>
+                  </div>
+                  <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                  </summary>
+                  <div className="p-4 pt-2 space-y-6">
+                  {/* Stats Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-zinc-900/50 rounded-lg p-3 border border-zinc-800">
+                    <div className="text-[9px] text-zinc-500 uppercase tracking-wider font-medium">Total Images</div>
+                    <div className="text-base font-bold text-white mt-1 truncate">{datasetStats.total_images}</div>
+                    </div>
+                    <div className="bg-zinc-900/50 rounded-lg p-3 border border-zinc-800">
+                    <div className="text-[9px] text-zinc-500 uppercase tracking-wider font-medium">Classes</div>
+                    <div className="text-base font-bold text-white mt-1 truncate">{datasetStats.class_count}</div>
+                    </div>
+                    <div className="bg-zinc-900/50 rounded-lg p-3 border border-zinc-800">
+                    <div className="text-[9px] text-zinc-500 uppercase tracking-wider font-medium">Avg Size</div>
+                    <div className="text-base font-bold text-white mt-1 truncate">{datasetStats.avg_image_size || 'N/A'}</div>
+                    </div>
+                    <div className="bg-zinc-900/50 rounded-lg p-3 border border-zinc-800">
+                    <div className="text-[9px] text-zinc-500 uppercase tracking-wider font-medium">Splits</div>
+                    <div className="text-base font-bold text-white mt-1 truncate">
+                      {Object.entries(datasetStats.splits || {}).filter(([, v]: [string, any]) => v > 0).length}
+                    </div>
+                    </div>
+                    </div>
+                  
+                  {/* Common Sizes */}
+                  {datasetStats.common_sizes && datasetStats.common_sizes.length > 0 && (
+                    <div className="pt-4 border-t border-zinc-800/50">
+                    <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-3 font-semibold">Common Resolutions</div>
+                    <div className="flex flex-wrap gap-2">
+                      {datasetStats.common_sizes.slice(0, 4).map((s: any, i: number) => (
+                      <span key={i} className="text-xs px-3 py-1.5 bg-zinc-900 rounded border border-zinc-800 text-zinc-300 font-mono font-medium hover:border-zinc-700 transition-colors">
+                        {s.size}
+                      </span>
+                      ))}
+                    </div>
+                    </div>
+                  )}
+                  </div>
+                </details>
+                )}
 
               {/* Model & Hyperparameters Accordion */}
               <details className="group border-2 border-white rounded-xl overflow-hidden bg-black text-white" open>
@@ -2299,3 +2387,4 @@ const InsightCard = ({ title, children }: any) => (
     </>
   );
 }
+
