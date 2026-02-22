@@ -139,6 +139,8 @@ export default function Home() {
   const childRef = useRef<any>(null);
   const autoMLChildRef = useRef<any>(null);
   const metricsRef = useRef<any[]>([]);
+  // Ref that always points to the latest startTraining — avoids stale closure in listeners
+  const startTrainingRef = useRef<() => void>(() => {});
   const [runs, setRuns] = useState<any[]>([]);
 
   // Dataset Analysis State
@@ -263,18 +265,75 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isRunning, datasetPath, showPresets, showExperiments]);
 
+  // Keep ref in sync with the latest startTraining on every render
+  // so the mobile_command listener always uses the current datasetPath
+  useEffect(() => {
+    startTrainingRef.current = startTraining;
+  });
+
   // Listen for mobile commands
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     
     const setupListener = async () => {
       unlisten = await listen<string>('mobile_command', (event) => {
-        if (event.payload === 'stop_training') {
+        const payload = event.payload;
+
+        if (payload === 'stop_training') {
           addLog('⏹️ Stop command received from Mobile App!', 'error');
           if (childRef.current) childRef.current.kill();
           if (autoMLChildRef.current) autoMLChildRef.current.kill();
           setIsRunning(false);
           setIsAutoMLRunning(false);
+          return;
+        }
+
+        // Try to parse as JSON (start_training / adjust_params)
+        try {
+          const cmd = JSON.parse(payload);
+          if (cmd.action === 'start_training') {
+            if (isRunning || isAutoMLRunning) {
+              addLog('⚠️ Mobile requested start, but training is already in progress. Stop it first.', 'error');
+              invoke('broadcast_log', {
+                log: JSON.stringify({ type: 'training_busy', message: 'Training already in progress on desktop.' })
+              }).catch(console.error);
+            } else {
+              addLog('▶️ Start training command received from Mobile App!', 'info');
+              if (cmd.epochs !== undefined) setEpochs(Number(cmd.epochs));
+              if (cmd.batch_size !== undefined) setBatchSize(Number(cmd.batch_size));
+              if (cmd.learning_rate !== undefined) setLearningRate(Number(cmd.learning_rate));
+              if (cmd.model !== undefined) setModel(String(cmd.model));
+              // Use ref so we always call the latest startTraining (avoids stale closure over datasetPath)
+              setTimeout(() => startTrainingRef.current(), 200);
+            }
+          } else if (cmd.action === 'adjust_params') {
+            addLog('⚙️ Params adjusted from Mobile App', 'info');
+            if (cmd.epochs !== undefined) { setEpochs(Number(cmd.epochs)); addLog(`  Epochs → ${cmd.epochs}`, 'info'); }
+            if (cmd.batch_size !== undefined) { setBatchSize(Number(cmd.batch_size)); addLog(`  Batch Size → ${cmd.batch_size}`, 'info'); }
+            if (cmd.learning_rate !== undefined) { setLearningRate(Number(cmd.learning_rate)); addLog(`  LR → ${cmd.learning_rate}`, 'info'); }
+            if (cmd.model !== undefined) { setModel(String(cmd.model)); addLog(`  Model → ${cmd.model}`, 'info'); }
+          } else if (cmd.action === 'select_dataset') {
+            addLog('📂 Dataset selection requested from Mobile App', 'info');
+            // Open the native folder picker on the desktop
+            open({ directory: true, multiple: false, title: 'Select Dataset Folder' }).then((selected) => {
+              if (selected && typeof selected === 'string') {
+                setDatasetPath(selected);
+                addLog(`📁 Dataset selected: ${selected}`, 'success');
+                // Broadcast back to mobile so it can display the path
+                invoke('broadcast_log', {
+                  log: JSON.stringify({ type: 'dataset_update', path: selected })
+                }).catch(console.error);
+              } else {
+                invoke('broadcast_log', {
+                  log: JSON.stringify({ type: 'dataset_update', path: null })
+                }).catch(console.error);
+              }
+            }).catch(() => {
+              addLog('❌ Failed to open folder picker', 'error');
+            });
+          }
+        } catch {
+          // Unknown string command - ignore
         }
       });
     };
@@ -284,6 +343,7 @@ export default function Home() {
     return () => {
       if (unlisten) unlisten();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const applyPreset = (preset: Preset) => {
@@ -328,6 +388,19 @@ useEffect(() => {
           setMatrixImageUrl(url);
           setImageLoadError(false);
           addLog(`Loaded confusion matrix via Blob URL: ${url}`, 'info');
+
+          // Encode as base64 and broadcast to mobile app
+          try {
+            const base64 = btoa(
+              Array.from(fileContents).map((b: number) => String.fromCharCode(b)).join('')
+            );
+            invoke('broadcast_log', {
+              log: JSON.stringify({ type: 'confusion_matrix', data: `data:image/png;base64,${base64}` })
+            }).catch(console.error);
+            addLog('📱 Confusion matrix sent to mobile', 'success');
+          } catch (encErr) {
+            console.error('Failed to encode matrix for mobile:', encErr);
+          }
         } catch (err) {
           addLog(`Failed to load matrix image file: ${err}`, 'error');
            try {
@@ -373,6 +446,10 @@ useEffect(() => {
       if (selected && typeof selected === 'string') {
         setDatasetPath(selected);
         if (!savePath) setSavePath(selected);
+        // Notify connected mobile clients of the selected dataset
+        invoke('broadcast_log', {
+          log: JSON.stringify({ type: 'dataset_update', path: selected })
+        }).catch(console.error);
         // Auto-analyze the dataset when selected
         analyzeDataset(selected);
       }
@@ -938,7 +1015,7 @@ useEffect(() => {
             <h1 className="text-2xl font-bold tracking-tight text-white">
               EPOQ
             </h1>
-            <p className="text-sm text-zinc-500 font-mono">v0.1.0-beta</p>
+            <p className="text-sm text-zinc-500 font-mono">v0.2.0-beta</p>
           </div>
         </div>
         

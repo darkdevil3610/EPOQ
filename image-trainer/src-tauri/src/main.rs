@@ -310,6 +310,12 @@ fn main() {
                                             }
                                         } else if action == "stop_training" {
                                             app_handle.emit("mobile_command", "stop_training").unwrap();
+                                        } else if action == "start_training" {
+                                            // Forward entire JSON payload to desktop frontend
+                                            app_handle.emit("mobile_command", text.to_string()).unwrap();
+                                        } else if action == "adjust_params" {
+                                            // Forward live adjustment command
+                                            app_handle.emit("mobile_command", text.to_string()).unwrap();
                                         }
                                     }
                                 }
