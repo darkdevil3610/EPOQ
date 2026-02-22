@@ -79,7 +79,11 @@ def main():
     except Exception:
        aug_config = {}
     data_dir = args.path
-    save_dir = args.save_path if args.save_path else data_dir
+    # Always store runs inside a stable app-level directory
+    base_runs_dir = os.path.join(os.path.expanduser("~"), ".epoq_runs")
+    os.makedirs(base_runs_dir, exist_ok=True)
+
+    save_dir = base_runs_dir
     
     if not os.path.exists(data_dir):
         print(json.dumps({"status": "error", "message": "Directory not found"}), flush=True)

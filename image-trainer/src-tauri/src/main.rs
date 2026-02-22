@@ -145,22 +145,28 @@ async fn check_dependencies(app: tauri::AppHandle) -> Result<String, String> {
 #[tauri::command]
 fn fetch_runs(save_path: String) -> Result<String, String> {
     use std::fs;
+    use std::path::Path;
 
-    let runs_dir = format!("{}/experiments", save_path);
+    let experiments_dir = Path::new(&save_path).join("experiments");
+
+    if !experiments_dir.exists() {
+        return Ok("[]".to_string());
+    }
 
     let mut runs = Vec::new();
 
-    if let Ok(entries) = fs::read_dir(&runs_dir) {
-        for entry in entries.flatten() {
-            if let Ok(content) = fs::read_to_string(entry.path()) {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                    runs.push(json);
-                }
+    for entry in fs::read_dir(experiments_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+
+        if path.extension().and_then(|s| s.to_str()) == Some("json") {
+            if let Ok(content) = fs::read_to_string(&path) {
+                runs.push(content);
             }
         }
     }
 
-    Ok(serde_json::to_string(&runs).unwrap())
+    Ok(format!("[{}]", runs.join(",")))
 }
 fn main() {
     tauri::Builder::default()

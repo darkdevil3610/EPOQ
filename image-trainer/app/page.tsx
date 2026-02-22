@@ -849,26 +849,23 @@ const loadRuns = async () => {
   if (!savePath) return;
 
   try {
-    const raw = await invoke('fetch_runs', { savePath });
-    const parsed = JSON.parse(raw as string);
-
-    const sorted = parsed.sort((a: any, b: any) => {
-      if (b.final_validation_accuracy !== a.final_validation_accuracy) {
-        return b.final_validation_accuracy - a.final_validation_accuracy;
-      }
-      return a.overfitting_gap - b.overfitting_gap;
+    const raw = await invoke('fetch_runs', {
+      savePath: savePath
     });
 
-    setRuns(sorted);
+    const parsed = JSON.parse(raw as string);
+    setRuns(parsed);
+
   } catch (err) {
     console.error("Failed to load runs:", err);
   }
 };
 useEffect(() => {
-  if (activeTab === 'runs') {
+  if (activeTab === "runs") {
     loadRuns();
   }
-}, [activeTab, savePath]);
+}, [activeTab]);
+
   return (
     <>
       {!depsChecked && <DependencyWizard onComplete={() => setDepsChecked(true)} />}
