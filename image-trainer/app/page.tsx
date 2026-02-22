@@ -1080,7 +1080,7 @@ const getUsageColor = (value: number) => {
               {/* AutoML Hyperparameter Sweep */}
               <div className="pt-6 border-t border-zinc-800/50 space-y-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Zap className="w-4 h-4 text-amber-400" />
+                  <Zap className="w-4 h-4 text-zinc-400" />
                   <span className="text-xs uppercase tracking-wider text-zinc-500 font-semibold">AutoML Sweep</span>
                 </div>
                 <p className="text-xs text-zinc-600 -mt-2">Automatically find the best learning rate, batch size, and optimizer using Optuna.</p>
@@ -1105,8 +1105,8 @@ const getUsageColor = (value: number) => {
                       className={cn(
                         "w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all",
                         isAutoMLRunning
-                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/30 cursor-not-allowed"
-                          : "bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400 shadow-lg shadow-amber-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                          ? "bg-zinc-800 text-zinc-400 border border-zinc-700 cursor-not-allowed"
+                          : "bg-white text-black hover:bg-zinc-200 shadow-lg shadow-white/5 disabled:opacity-40 disabled:cursor-not-allowed"
                       )}
                     >
                       {isAutoMLRunning ? (
@@ -1127,7 +1127,7 @@ const getUsageColor = (value: number) => {
                     </div>
                     <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500 ease-out"
+                        className="h-full bg-white transition-all duration-500 ease-out"
                         style={{ width: `${autoMLProgress}%` }}
                       />
                     </div>
@@ -1154,15 +1154,15 @@ const getUsageColor = (value: number) => {
                               return (
                                 <tr key={i} className={cn(
                                   "transition-colors",
-                                  isBest ? "bg-amber-500/10" : "hover:bg-zinc-900/50"
+                                  isBest ? "bg-white/5" : "hover:bg-zinc-900/50"
                                 )}>
                                   <td className="px-3 py-2 text-zinc-400 font-mono">
-                                    {isBest && <span className="mr-1">⭐</span>}{t.trial}
+                                    {isBest && <span className="mr-1">●</span>}{t.trial}
                                   </td>
                                   <td className="px-3 py-2 text-zinc-300 font-mono">{t.params.learning_rate.toExponential(2)}</td>
                                   <td className="px-3 py-2 text-zinc-300 font-mono">{t.params.batch_size}</td>
                                   <td className="px-3 py-2 text-zinc-300">{t.params.optimizer}</td>
-                                  <td className={cn("px-3 py-2 text-right font-mono font-semibold", isBest ? "text-amber-400" : "text-zinc-300")}>
+                                  <td className={cn("px-3 py-2 text-right font-mono font-semibold", isBest ? "text-emerald-400" : "text-zinc-300")}>
                                     {(t.val_accuracy * 100).toFixed(2)}%
                                   </td>
                                 </tr>
@@ -1175,10 +1175,10 @@ const getUsageColor = (value: number) => {
 
                     {/* Best Result Banner */}
                     {autoMLBestParams && (
-                      <div className="p-3 rounded-lg bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30">
+                      <div className="p-3 rounded-lg bg-zinc-900/50 border border-zinc-800">
                         <div className="flex items-center gap-2 mb-1">
-                          <Zap className="w-3.5 h-3.5 text-amber-500" />
-                          <span className="text-xs font-semibold text-amber-600">Best Config Applied</span>
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-xs font-semibold text-zinc-300">Best Config Applied</span>
                         </div>
                         <p className="text-xs text-zinc-400">
                           LR: <span className="text-zinc-300 font-mono font-semibold">{autoMLBestParams.learning_rate.toExponential(2)}</span> · 
